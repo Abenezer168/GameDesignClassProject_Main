@@ -1,0 +1,359 @@
+using System.Collections;
+using System.Text;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace DataHeist
+{
+    /// <summary>
+    /// Scene entry point for a Data Heist level. Owns the simulation, steps it at a fixed
+    /// 120 Hz, feeds it input, and routes its events to views, FX, audio and UI.
+    /// Drop this on one GameObject in an empty scene; everything else is built at runtime.
+    /// </summary>
+    public class LevelController : MonoBehaviour
+    {
+        [Tooltip("Level json in Resources/DataHeist/Levels")]
+        public string levelId = "level01";
+        [Tooltip("Optional override for testing in the editor (kai, nova, jax, lin). Empty = saved selection.")]
+        public string characterOverride = "";
+        [Tooltip("Seconds of 3-2-1 before the run starts")]
+        public float introCountdown = 3.2f;
+
+        public RunnerSim Sim { get; private set; }
+
+        LevelData _level;
+        CharacterDefinition _ch;
+        RunnerInput _input;
+        CameraRig _cam;
+        PlayerView _player;
+        EntityViews _entities;
+        FXSystem _fx;
+        LevelHUD _hud;
+        LevelMenus _menus;
+
+        float _acc, _countdown, _hitStop, _glitch;
+        int _lastCount = -1;
+        bool _paused, _alarmOn, _banked, _endShown;
+        int _byteChain; float _byteChainT;
+        // latched edge inputs so a press is never lost between fixed steps
+        bool _jumpLatch, _slideLatch, _attackLatch, _abilityLatch;
+
+        void Awake()
+        {
+            Application.targetFrameRate = 120;
+            GameSession.CurrentLevel = levelId;
+            _level = LevelData.Load(levelId);
+            if (_level == null) { enabled = false; return; }
+            var id = string.IsNullOrEmpty(characterOverride) ? GameSession.SelectedCharacter : characterOverride;
+            _ch = CharacterDefinition.Get(id);
+            _input = new RunnerInput();
+
+            Sim = new RunnerSim(_level, _ch);
+            _cam = CameraRig.Create();
+            Parallax.Create(_cam.transform, Sim.p.y);
+            WorldBuilder.Build(_level, Sim);
+
+            _entities = new GameObject("Entities").AddComponent<EntityViews>();
+            _entities.Init(Sim);
+            _player = new GameObject("Runner_" + _ch.id).AddComponent<PlayerView>();
+            _player.Init(Sim);
+            _fx = new GameObject("FX").AddComponent<FXSystem>();
+
+            _hud = new GameObject("HUD").AddComponent<LevelHUD>();
+            _hud.Init(Sim, _input);
+            _menus = new GameObject("Menus").AddComponent<LevelMenus>();
+            _menus.Init(_input);
+            _menus.OnResume += Resume;
+            _menus.OnRestart += Restart;
+            _menus.OnRetryCheckpoint += RetryCheckpoint;
+            _menus.OnQuitToRunners += () => Leave(DH.SceneCharacterSelect);
+            _menus.OnQuitToMenu += () => Leave(DH.SceneMainMenu);
+            _menus.OnBindingsChanged += _hud.RefreshControls;
+
+            _cam.Bind(Sim);
+            _countdown = introCountdown;
+            AudioManager.I.Music("music_level01", true);
+        }
+
+        void OnDestroy()
+        {
+            _input?.Dispose();
+            Time.timeScale = 1f;
+        }
+
+        // ------------------------------------------------------------------ loop
+        void Update()
+        {
+            if (Sim == null) return;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+
+            if (_input.Pause.WasPressedThisFrame())
+            {
+                if (_paused && _menus.PauseOpen) Resume();
+                else if (!_paused && Sim.state == SimState.Running && _countdown <= 0) Pause();
+            }
+            if (_paused) return;
+
+            if (_input.Jump.WasPressedThisFrame()) _jumpLatch = true;
+            if (_input.Slide.WasPressedThisFrame()) _slideLatch = true;
+            if (_input.Attack.WasPressedThisFrame()) _attackLatch = true;
+            if (_input.Ability.WasPressedThisFrame()) _abilityLatch = true;
+
+            _byteChainT -= dt;
+            if (_byteChainT <= 0) _byteChain = 0;
+
+            if (_countdown > 0)
+            {
+                _countdown -= dt;
+                int c = Mathf.CeilToInt(_countdown - 0.2f);
+                if (c != _lastCount)
+                {
+                    _lastCount = c;
+                    if (c > 0 && c <= 3) AudioManager.I.Sfx("count", 0.6f);
+                    else if (c <= 0) AudioManager.I.Sfx("go", 0.7f);
+                }
+                _hud.SetCountdown(_countdown, Sim.stats.deaths == 0, _level);
+                _jumpLatch = _slideLatch = _attackLatch = _abilityLatch = false;
+                return;
+            }
+            _hud.SetCountdown(0, false, _level);
+
+            if (_hitStop > 0) { _hitStop -= dt; return; }
+
+            float scale = 1f;
+            if (_glitch > 0)
+            {
+                _glitch -= dt; scale = 0.5f;
+                if (_glitch <= 0) AudioManager.I.MusicPitch(1f);
+            }
+            _player.GlitchTime = _glitch;
+            _hud.GlitchT = _glitch;
+
+            _acc += dt * scale;
+            int guard = 0;
+            while (_acc >= DH.SimStep && guard++ < 20)
+            {
+                var frame = new RunnerInputFrame
+                {
+                    jumpPressed = _jumpLatch, jumpHeld = _input.Jump.IsPressed(),
+                    slidePressed = _slideLatch, slideHeld = _input.Slide.IsPressed(),
+                    attackPressed = _attackLatch, abilityPressed = _abilityLatch,
+                };
+                _jumpLatch = _slideLatch = _attackLatch = _abilityLatch = false;
+                Sim.Step(DH.SimStep, frame);
+                _acc -= DH.SimStep;
+                HandleEvents();
+                if (Sim.state != SimState.Running) { _acc = 0; break; }
+            }
+            // keep Unity's Time in step with the glitch so particles/animators slow too
+            Time.timeScale = scale;
+
+            bool alarm = Sim.InAlarmZone;
+            if (alarm && !_alarmOn) AudioManager.I.Sfx("alarm", 0.6f);
+            _alarmOn = alarm;
+            _hud.Alarm = alarm;
+        }
+
+        // ------------------------------------------------------------------ events
+        void HandleEvents()
+        {
+            var a = AudioManager.I;
+            var p = Sim.p;
+            foreach (var ev in Sim.events)
+            {
+                var at = new Vector2(ev.x, ev.y);
+                switch (ev.type)
+                {
+                    case SimEventType.Jump:
+                        a.Sfx("jump", 0.7f);
+                        _fx.Burst(at, 6, new[] { DH.Hex("b8a8e0"), DH.Hex("6a5f8e") }, 3, 0.35f, -6);
+                        break;
+                    case SimEventType.AirJump:
+                        a.Sfx("air_jump", 0.8f);
+                        _fx.Burst(at + new Vector2(-0.1f, 0), 14, new[] { _ch.color, DH.Orange, Color.white }, 5, 0.4f, -18);
+                        break;
+                    case SimEventType.Land:
+                        a.Sfx("land", ev.flag ? 0.8f : 0.45f);
+                        _fx.Burst(at, ev.flag ? 10 : 5, new[] { DH.Hex("8a7fb0"), DH.Hex("4b4268") }, 3, 0.3f, -8);
+                        if (ev.flag) _cam.Shake(0.15f);
+                        break;
+                    case SimEventType.Slide: a.Sfx("slide", 0.6f); break;
+                    case SimEventType.Dive: a.Sfx("dash", 0.35f, 1.6f); break;
+                    case SimEventType.Attack: a.Sfx("attack", 0.7f); _player.OnAttack(); break;
+                    case SimEventType.Byte:
+                        a.Sfx("byte", 0.45f, 1f + Mathf.Min(0.5f, _byteChain++ * 0.03f));
+                        _byteChainT = 0.5f;
+                        _fx.Burst(at, 4, new[] { DH.Cyan, Color.white }, 2.5f, 0.3f, 0);
+                        break;
+                    case SimEventType.Repair:
+                        a.Sfx("repair", 0.8f);
+                        _fx.FloatText(at + Vector2.up * 0.6f, "+1 HP", DH.Green);
+                        _fx.Burst(at, 14, new[] { DH.Green, Color.white }, 4, 0.6f, 0);
+                        break;
+                    case SimEventType.Shard:
+                        a.Sfx("shard", 1f);
+                        _fx.FloatText(at + Vector2.up, "DATA SHARD SECURED", DH.Pink);
+                        _fx.Burst(at, 40, new[] { DH.Pink, DH.Cyan, Color.white }, 7, 1f, 0);
+                        _hud.Flash(0.25f);
+                        break;
+                    case SimEventType.Pad:
+                        a.Sfx("pad", 0.8f);
+                        _fx.Burst(at + Vector2.up * 0.3f, 12, new[] { DH.Amber, DH.Orange }, 5, 0.4f, -10);
+                        break;
+                    case SimEventType.DroneDown:
+                        a.Sfx("explode", 0.7f);
+                        _cam.Shake(0.22f);
+                        if (ev.info != "emp") _hitStop = Mathf.Max(_hitStop, 0.05f);
+                        _fx.Explosion(at);
+                        _fx.Burst(at, 16, new[] { DH.Amber, DH.Orange, DH.Pink, DH.Hex("565f7e") }, 7, 0.7f, -14);
+                        _fx.FloatText(at + Vector2.up * 0.5f, ev.info == "stomp" ? "STOMP +25" : "+25", DH.Amber);
+                        break;
+                    case SimEventType.CanHit:
+                        _fx.Burst(at + Vector2.up * 0.4f, 14, new[] { DH.Hex("4a5a78"), DH.Green, DH.Hex("7d90b4") }, 6, 0.6f, -20);
+                        break;
+                    case SimEventType.Hurt:
+                        a.Sfx("hurt", 1f);
+                        _cam.Shake(0.35f); _hitStop = 0.08f; _hud.Flash(0.18f);
+                        _fx.FloatText(new Vector2(p.x, p.y + 1.6f), "-1", DH.Red);
+                        break;
+                    case SimEventType.Dead:
+                        a.Sfx("game_over", 1f);
+                        _cam.Shake(0.4f);
+                        AudioManager.I.MusicPitch(0.6f);
+                        StartCoroutine(ShowOverAfter(0.9f, ev.info));
+                        break;
+                    case SimEventType.Checkpoint:
+                        a.Sfx("checkpoint", 0.9f);
+                        _fx.FloatText(new Vector2(ev.x, ev.y + 2.4f), "CHECKPOINT", DH.Green);
+                        break;
+                    case SimEventType.Dash: a.Sfx("dash", 0.9f); _cam.Shake(0.1f); break;
+                    case SimEventType.Emp:
+                        a.Sfx("emp", 1f); _player.OnEmp(); _cam.Shake(0.3f); _hud.Flash(0.2f);
+                        break;
+                    case SimEventType.Glitch:
+                        a.Sfx("glitch", 1f); _glitch = 3f; AudioManager.I.MusicPitch(0.75f);
+                        break;
+                    case SimEventType.AbilityDenied: a.Sfx("denied", 0.4f); break;
+                    case SimEventType.Shoot: a.Sfx("shoot", 0.5f); break;
+                    case SimEventType.Deflect:
+                        a.Sfx("deflect", 0.9f);
+                        _fx.Burst(at, 10, new[] { DH.Orange, Color.white }, 5, 0.35f, 0);
+                        break;
+                    case SimEventType.Respawn:
+                        _countdown = 1.6f; _lastCount = -1; AudioManager.I.MusicPitch(1f);
+                        break;
+                    case SimEventType.Win:
+                        StartCoroutine(Win());
+                        break;
+                }
+            }
+            Sim.events.Clear();
+        }
+
+        // ------------------------------------------------------------------ flow
+        void Pause()
+        {
+            _paused = true; Time.timeScale = 0f;
+            AudioManager.I.MusicDuck(true);
+            AudioManager.I.Sfx("ui_back");
+            _menus.ShowPause();
+        }
+
+        void Resume()
+        {
+            _paused = false; Time.timeScale = 1f;
+            AudioManager.I.MusicDuck(false);
+            _menus.HideAll();
+            _jumpLatch = _slideLatch = _attackLatch = _abilityLatch = false;
+        }
+
+        IEnumerator ShowOverAfter(float delay, string cause)
+        {
+            Time.timeScale = 1f; _glitch = 0;
+            yield return new WaitForSecondsRealtime(delay);
+            if (Sim.state != SimState.Dead) yield break;
+            _paused = true;
+            _menus.ShowOver(cause, Sim.checkpointX > _level.spawnX);
+        }
+
+        void RetryCheckpoint()
+        {
+            _menus.HideAll();
+            _paused = false; Time.timeScale = 1f;
+            Sim.Respawn();
+            HandleEvents();
+            _player.ResetRun();
+            _cam.Snap();
+        }
+
+        void Restart()
+        {
+            Time.timeScale = 1f;
+            BankBytes();
+            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        }
+
+        void Leave(string scene)
+        {
+            Time.timeScale = 1f;
+            BankBytes();
+            if (Application.CanStreamedLevelBeLoaded(scene)) SceneManager.LoadScene(scene);
+            else
+            {
+                Debug.LogWarning($"[DataHeist] Scene '{scene}' is not in Build Settings. Run Data Heist > Setup Project.");
+                SceneManager.LoadScene(DH.SceneMainMenu);
+            }
+        }
+
+        /// <summary>Bytes collected are always banked to the wallet, even on a failed run.</summary>
+        void BankBytes()
+        {
+            if (_banked || Sim == null) return;
+            _banked = true;
+            SaveSystem.Data.bytes += Sim.stats.bytes;
+            SaveSystem.Save();
+        }
+
+        IEnumerator Win()
+        {
+            if (_endShown) yield break;
+            _endShown = true;
+            Time.timeScale = 1f; _glitch = 0;
+            AudioManager.I.Sfx("level_complete", 1f);
+            AudioManager.I.Music("music_menu", true);
+            yield return new WaitForSecondsRealtime(1.4f);
+
+            var s = Sim.stats;
+            string rank = Sim.Rank();
+            int score = Sim.Score();
+            BankBytes();
+            var unlocks = new StringBuilder();
+            var data = SaveSystem.Data;
+            if (!data.cleared.Contains(_level.id))
+            {
+                data.cleared.Add(_level.id);
+                foreach (var c in CharacterDefinition.All)
+                    if (c.unlock == UnlockType.ClearLevel && c.unlockLevelId == _level.id && !data.unlocked.Contains(c.id))
+                    {
+                        data.unlocked.Add(c.id);
+                        unlocks.AppendLine($"> {c.displayName} JOINED THE CREW");
+                    }
+            }
+            bool best = SaveSystem.SubmitRecord(new LevelRecord { levelId = _level.id, score = score, rank = rank, time = Sim.time, bytes = s.bytes });
+            SaveSystem.Save();
+            foreach (var c in CharacterDefinition.All)
+                if (c.unlock == UnlockType.Bytes && !data.unlocked.Contains(c.id) && data.bytes >= c.unlockCost)
+                    unlocks.AppendLine($"> {c.displayName} CAN BE RECRUITED ({c.unlockCost})");
+
+            string rows =
+                $"DATA BYTES   <color=#2ff3ff>{s.bytes} / {Sim.totalBytes}</color>\n" +
+                $"DRONES DOWN  <color=#2ff3ff>{s.drones}</color>\n" +
+                $"HITS TAKEN   <color=#2ff3ff>{s.hits}</color>\n" +
+                $"RETRIES      <color=#2ff3ff>{s.deaths}</color>\n" +
+                $"TIME         <color=#2ff3ff>{DH.FormatTime(Sim.time)}</color>\n" +
+                $"SCORE        <color=#2ff3ff>{score}</color>{(best ? "  <color=#ffd23a>NEW BEST</color>" : "")}";
+            _paused = true;
+            _menus.ShowResults(rank, rows, unlocks.ToString(), data.bytes);
+        }
+    }
+}

@@ -1,0 +1,191 @@
+using System;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
+
+namespace DataHeist
+{
+    /// <summary>Pause (with volume + key rebinding), Signal Lost (game over) and Extraction Complete (results) screens.</summary>
+    public class LevelMenus : MonoBehaviour
+    {
+        public event Action OnResume, OnRestart, OnRetryCheckpoint, OnQuitToRunners, OnQuitToMenu;
+        public event Action OnBindingsChanged;
+
+        RunnerInput _input;
+        GameObject _pause, _controls, _over, _results;
+        Button _resumeBtn, _retryBtn, _continueBtn, _controlsBack;
+        TextMeshProUGUI _overCause, _rank, _rows, _unlocks, _wallet;
+        readonly List<(InputAction action, Button button)> _bindButtons = new List<(InputAction, Button)>();
+
+        public bool AnyOpen => _pause.activeSelf || _controls.activeSelf || _over.activeSelf || _results.activeSelf;
+        public bool PauseOpen => _pause.activeSelf || _controls.activeSelf;
+
+        public void Init(RunnerInput input)
+        {
+            _input = input;
+            var canvas = UIKit.Canvas("Menus", 20);
+            canvas.transform.SetParent(transform, false);
+            var root = (RectTransform)canvas.transform;
+            BuildPause(root);
+            BuildControls(root);
+            BuildOver(root);
+            BuildResults(root);
+            HideAll();
+        }
+
+        RectTransform Modal(string name, RectTransform root, Color accent, Vector2 size, out GameObject screen)
+        {
+            var dim = UIKit.Image(name, root, new Color(0.04f, 0.02f, 0.09f, 0.72f));
+            dim.raycastTarget = true;
+            dim.rectTransform.Stretch();
+            screen = dim.gameObject;
+            var box = UIKit.Panel("Box", dim.rectTransform, accent);
+            box.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, size);
+            var inner = UIKit.Rect("Inner", box.rectTransform).Stretch(16);
+            UIKit.VStack(inner, 6);
+            return inner;
+        }
+
+        TextMeshProUGUI Title(Transform parent, string text, Color c)
+        {
+            var t = UIKit.Text("Title", parent, text, 14, c, TextAlignmentOptions.Center);
+            UIKit.Size(t, 24);
+            return t;
+        }
+
+        Button Btn(Transform parent, string label, Action a, bool primary = false)
+        {
+            var b = UIKit.Button(label, parent, label, a, primary);
+            UIKit.Size(b, 22);
+            return b;
+        }
+
+        void BuildPause(RectTransform root)
+        {
+            var box = Modal("Pause", root, DH.Cyan, new Vector2(280, 250), out _pause);
+            Title(box, "PAUSED", DH.Cyan);
+            Slider(box, "MUSIC", SaveSystem.Data.musicVolume, v => { SaveSystem.Data.musicVolume = v; SaveSystem.Save(); AudioManager.I.ApplyVolumes(); });
+            Slider(box, "SOUND FX", SaveSystem.Data.sfxVolume, v => { SaveSystem.Data.sfxVolume = v; SaveSystem.Save(); });
+            _resumeBtn = Btn(box, "RESUME", () => OnResume?.Invoke(), true);
+            Btn(box, "CONTROLS", ShowControls);
+            Btn(box, "RESTART LEVEL", () => OnRestart?.Invoke());
+            Btn(box, "QUIT TO RUNNERS", () => OnQuitToRunners?.Invoke());
+            Btn(box, "MAIN MENU", () => OnQuitToMenu?.Invoke());
+        }
+
+        void Slider(Transform parent, string label, float value, Action<float> onChange)
+        {
+            var row = UIKit.Rect(label, parent);
+            UIKit.Size(row, 16);
+            var t = UIKit.Text("Label", row, label, 7, DH.Ink);
+            t.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(80, 12));
+            var sr = UIKit.Rect("Slider", row);
+            sr.anchorMin = new Vector2(0, 0.5f); sr.anchorMax = new Vector2(1, 0.5f);
+            sr.offsetMin = new Vector2(90, -4); sr.offsetMax = new Vector2(0, 4);
+            var bg = UIKit.Image("Bg", sr, DH.PurpleLine); bg.rectTransform.Stretch();
+            var fillArea = UIKit.Rect("FillArea", sr).Stretch();
+            var fill = UIKit.Image("Fill", fillArea, DH.Pink); fill.rectTransform.Stretch();
+            var handleArea = UIKit.Rect("HandleArea", sr).Stretch();
+            var handle = UIKit.Image("Handle", handleArea, Color.white);
+            handle.rectTransform.sizeDelta = new Vector2(6, 12);
+            var s = sr.gameObject.AddComponent<Slider>();
+            s.fillRect = fill.rectTransform;
+            s.handleRect = handle.rectTransform;
+            s.targetGraphic = handle;
+            s.minValue = 0; s.maxValue = 1;
+            s.value = value;
+            s.onValueChanged.AddListener(v => onChange(v));
+        }
+
+        void BuildControls(RectTransform root)
+        {
+            var box = Modal("Controls", root, DH.Cyan, new Vector2(300, 250), out _controls);
+            Title(box, "CONTROLS", DH.Cyan);
+            var hint = UIKit.Text("Hint", box, "Select an action, then press the new key. ESC cancels.", 6, DH.Dim, TextAlignmentOptions.Center);
+            UIKit.Size(hint, 18);
+            foreach (var a in new[] { _input.Jump, _input.Slide, _input.Attack, _input.Ability, _input.Pause })
+            {
+                var action = a;
+                Button b = null;
+                b = Btn(box, "", () => StartRebind(action, b));
+                _bindButtons.Add((action, b));
+            }
+            Btn(box, "RESET DEFAULTS", () => { _input.ResetOverrides(); RefreshBindings(); OnBindingsChanged?.Invoke(); });
+            _controlsBack = Btn(box, "BACK", ShowPause, true);
+            RefreshBindings();
+        }
+
+        void StartRebind(InputAction action, Button b)
+        {
+            b.Label($"{action.name.ToUpperInvariant()}  ...PRESS A KEY");
+            _input.Rebind(action, () => { RefreshBindings(); OnBindingsChanged?.Invoke(); });
+        }
+
+        void RefreshBindings()
+        {
+            foreach (var (a, b) in _bindButtons) b.Label($"{a.name.ToUpperInvariant(),-8}  {RunnerInput.KeyLabel(a)}");
+        }
+
+        void BuildOver(RectTransform root)
+        {
+            var box = Modal("SignalLost", root, DH.Pink, new Vector2(280, 190), out _over);
+            Title(box, "SIGNAL LOST", DH.Red);
+            _overCause = UIKit.Text("Cause", box, "", 8, DH.Ink, TextAlignmentOptions.Center);
+            UIKit.Size(_overCause, 22);
+            _retryBtn = Btn(box, "RETRY FROM CHECKPOINT", () => OnRetryCheckpoint?.Invoke(), true);
+            Btn(box, "RESTART LEVEL", () => OnRestart?.Invoke());
+            Btn(box, "QUIT TO RUNNERS", () => OnQuitToRunners?.Invoke());
+        }
+
+        void BuildResults(RectTransform root)
+        {
+            var box = Modal("Results", root, DH.Cyan, new Vector2(420, 250), out _results);
+            Title(box, "EXTRACTION COMPLETE", DH.Cyan);
+            var row = UIKit.Rect("Row", box);
+            UIKit.Size(row, 130);
+            _rank = UIKit.Text("Rank", row, "A", 64, DH.Amber, TextAlignmentOptions.Center);
+            _rank.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(0, 0), new Vector2(110, 110));
+            _rank.outlineWidth = 0.15f; _rank.outlineColor = new Color32(90, 31, 94, 255);
+            _rows = UIKit.Text("Rows", row, "", 7, DH.Ink);
+            _rows.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(120, 0), new Vector2(260, 80));
+            _rows.lineSpacing = 30;
+            _unlocks = UIKit.Text("Unlocks", row, "", 7, DH.Amber);
+            _unlocks.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(120, 14), new Vector2(260, 34));
+            _wallet = UIKit.Text("Wallet", row, "", 7, DH.Dim);
+            _wallet.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(120, 0), new Vector2(260, 12));
+            _continueBtn = Btn(box, "CONTINUE", () => OnQuitToRunners?.Invoke(), true);
+            Btn(box, "RUN IT AGAIN", () => OnRestart?.Invoke());
+        }
+
+        public void HideAll()
+        {
+            _pause.SetActive(false); _controls.SetActive(false); _over.SetActive(false); _results.SetActive(false);
+        }
+
+        public void ShowPause() { HideAll(); _pause.SetActive(true); UIKit.Select(_resumeBtn); }
+        void ShowControls() { HideAll(); _controls.SetActive(true); RefreshBindings(); UIKit.Select(_controlsBack); }
+
+        public void ShowOver(string cause, bool hasCheckpoint)
+        {
+            HideAll();
+            _overCause.text = cause == "fall" ? "You fell from the rooftops." : "Corporate security took you down.";
+            _retryBtn.Label(hasCheckpoint ? "RETRY FROM CHECKPOINT" : "RETRY");
+            _over.SetActive(true);
+            UIKit.Select(_retryBtn);
+        }
+
+        public void ShowResults(string rank, string rowsText, string unlocks, int wallet)
+        {
+            HideAll();
+            _rank.text = rank;
+            _rank.color = rank == "S" ? DH.Pink : DH.Amber;
+            _rows.text = rowsText;
+            _unlocks.text = unlocks;
+            _wallet.text = $"WALLET  {wallet} BYTES";
+            _results.SetActive(true);
+            UIKit.Select(_continueBtn);
+        }
+    }
+}

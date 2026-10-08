@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fada3564b493dec6db656352b067bd90, type: 3}
+  m_Name: ColorPallet_SCO
+  m_EditorClassIdentifier: Assembly-CSharp-firstpass::BugFreeProductions.Tools.ColorPallet_SCO
+  colorSwatches:
+  - {fileID: 11400000, guid: 719d1d1e488203677ae19650112afe74, type: 2}
