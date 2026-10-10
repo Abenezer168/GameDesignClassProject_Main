@@ -66,7 +66,7 @@ namespace DataHeist
             _backdrop.runnerTint = SaveSystem.IsUnlocked(c) ? Color.white : new Color(0, 0, 0, 0.85f);
 
             var kb = Keyboard.current;
-            if (kb == null) return;
+            if (kb == null || LoadingScreen.Active) return;
             if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame) Move(1);
             if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame) Move(-1);
             if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) Confirm();
@@ -229,7 +229,10 @@ namespace DataHeist
             {
                 GameSession.SelectedCharacter = c.id;
                 GameSession.CurrentLevel = "level01";
-                Load(levelScene);
+                AudioManager.I.Sfx("ui_select", 0.8f);
+                AudioManager.I.StopMusic();
+                LoadingScreen.Run(levelScene, GamePreloader.Steps(story: false, levelId: "level01", onlyRunner: c.id),
+                    sceneLabel: "DROPPING INTO NEON ROOFTOPS");
             }
             else if (SaveSystem.TryUnlock(c))
             {

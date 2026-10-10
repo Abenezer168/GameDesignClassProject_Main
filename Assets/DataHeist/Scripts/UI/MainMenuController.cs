@@ -23,9 +23,10 @@ namespace DataHeist
         /// <summary>Panel to open as soon as the home page appears ("options" or "shop").</summary>
         public static string OpenOnStart;
 
-        // the press-any-key gate is shown once per launch; nothing makes a sound before it
+        // the key-art splash is shown once per launch; nothing makes a sound before the first press
         static bool _started;
-        TextMeshProUGUI _pressStart, _hint;
+        GameObject _splash;
+        TextMeshProUGUI _pressStart, _hint, _splashLogo, _splashCyan, _splashPink;
 
         readonly List<Button> _buttons = new List<Button>();
         readonly List<string> _descriptions = new List<string>();
@@ -46,6 +47,26 @@ namespace DataHeist
 
         void Start()
         {
+            _input = new RunnerInput();
+            _input.Map.Disable();
+            if (_started || OpenOnStart != null)
+            {
+                // coming back from a level, the story or an old scene: straight to the home page
+                _started = true;
+                BuildHome();
+                EnterMenu();
+                SceneFader.FadeIn(0.6f);
+            }
+            else
+            {
+                BuildSplash();
+                SceneFader.FadeIn(0.8f);
+            }
+        }
+
+        /// <summary>Demo world + menu UI. On launch this runs under the loading screen.</summary>
+        void BuildHome()
+        {
             // runner sits right of the menu column with 12 units of track visible ahead
             _demo = DemoPlayer.Create(GameSession.SelectedCharacter, 8f);
             if (_demo != null)
@@ -60,13 +81,60 @@ namespace DataHeist
                 _backdrop.runnerScreenX = 0.74f;
                 _backdrop.AddTower(0.66f);
             }
-            _input = new RunnerInput();
-            _input.Map.Disable();
             BuildUI();
             ScreenFX.Add();
-            SceneFader.FadeIn(0.6f);
-            if (_started || OpenOnStart != null) { _started = true; EnterMenu(); }
-            else ShowPressStart();
+        }
+
+        // ------------------------------------------------------------------ key-art splash
+        void BuildSplash()
+        {
+            // a plain camera so the screen isn't empty before the demo world exists
+            var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
+            var cam = camGo.AddComponent<Camera>();
+            cam.orthographic = true; cam.orthographicSize = DH.OrthoSize;
+            cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = DH.Night;
+            cam.nearClipPlane = -50; cam.farClipPlane = 50;
+            camGo.AddComponent<AudioListener>();
+
+            var canvas = UIKit.Canvas("KeyArtSplash", 100);
+            _splash = canvas.gameObject;
+            var root = (RectTransform)canvas.transform;
+            var art = UIKit.Image("KeyArt", root, Color.white, SpriteLibrary.Get("Story/keyart"));
+            art.rectTransform.Stretch();
+            art.raycastTarget = true;
+
+            var pre = UIKit.Text("The", root, "THE", 8, DH.Amber, TextAlignmentOptions.Center);
+            pre.characterSpacing = 40;
+            pre.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -12), new Vector2(200, 10));
+            _splashCyan = SplashLogo(root, DH.Cyan, -1);
+            _splashPink = SplashLogo(root, DH.Pink, 1);
+            _splashLogo = SplashLogo(root, DH.Ink, 0);
+
+            _pressStart = UIKit.Text("PressStart", root, "PRESS START", 10, DH.Cyan, TextAlignmentOptions.Center);
+            _pressStart.characterSpacing = 20;
+            _pressStart.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 30), new Vector2(300, 14));
+            var footer = UIKit.Text("Footer", root, "ANY KEY  /  CLICK  /  PAD A", 5, DH.Dim, TextAlignmentOptions.Center);
+            footer.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 16), new Vector2(300, 8));
+            var version = UIKit.Text("Version", root, "v0.6  //  GAME DESIGN CLASS PROJECT", 4, new Color(1, 1, 1, 0.35f), TextAlignmentOptions.Right);
+            version.rectTransform.Place(new Vector2(1, 0), new Vector2(1, 0), new Vector2(-10, 6), new Vector2(240, 8));
+        }
+
+        TextMeshProUGUI SplashLogo(RectTransform root, Color c, float offset)
+        {
+            var t = UIKit.Text("Logo", root, "DATA HEIST", 24, c, TextAlignmentOptions.Center);
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(offset, -24), new Vector2(400, 30));
+            if (offset != 0) t.alpha = 0.7f;
+            return t;
+        }
+
+        void UpdateSplash(float dt)
+        {
+            _pressStart.alpha = Mathf.Repeat(Time.unscaledTime, 1.2f) < 0.8f ? 1f : 0.2f;
+            UpdateGlitchTimer(dt);
+            float j = _glitchLeft > 0 ? UnityEngine.Random.Range(-3, 4) : 0;
+            _splashCyan.rectTransform.anchoredPosition = new Vector2(-1 - j, -24);
+            _splashPink.rectTransform.anchoredPosition = new Vector2(1 + j, -24);
         }
 
         void BuildUI()
@@ -203,6 +271,7 @@ namespace DataHeist
 
         void UpdateShowcase(float dt)
         {
+            if (_live == null) return;
             foreach (var c in _controls)
             {
                 _flash.TryGetValue(c.key, out float k);
@@ -222,38 +291,26 @@ namespace DataHeist
 
         void OnDestroy() => _input?.Dispose();
 
-        void ShowPressStart()
-        {
-            _menuRoot.SetActive(true);
-            foreach (var b in _buttons) b.gameObject.SetActive(false);
-            _desc.gameObject.SetActive(false);
-            _hint.gameObject.SetActive(false);
-            _pressStart = UIKit.Text("PressStart", (RectTransform)_menuRoot.transform, "PRESS ANY KEY", 9, DH.Cyan);
-            _pressStart.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -152), new Vector2(300, 14));
-        }
-
-        /// <summary>Player pressed a key on the title: story on first launch, otherwise the menu.</summary>
+        /// <summary>
+        /// PRESS START on the splash: the loading screen takes over and does the real loading.
+        /// First launch continues to the story; otherwise the home page is built under it.
+        /// </summary>
         void PressStart()
         {
+            if (_started || LoadingScreen.Active) return;
             _started = true;
             AudioManager.I.Sfx("ui_select", 0.8f);
-            if (!SaveSystem.Data.storySeen && Application.CanStreamedLevelBeLoaded(DH.SceneStory))
+            bool story = !SaveSystem.Data.storySeen && Application.CanStreamedLevelBeLoaded(DH.SceneStory);
+            if (story)
             {
-                SceneFader.Load(DH.SceneStory, 0.6f, 0.5f);
+                LoadingScreen.Run(DH.SceneStory, GamePreloader.Steps(story: true), sceneLabel: "ROLLING THE ARCHIVE FOOTAGE");
                 return;
             }
-            Destroy(_pressStart.gameObject);
-            StartCoroutine(RevealMenu());
-        }
-
-        // a frame later, so the key that dismissed the title can't also press PLAY
-        System.Collections.IEnumerator RevealMenu()
-        {
-            yield return null;
-            foreach (var b in _buttons) b.gameObject.SetActive(true);
-            _desc.gameObject.SetActive(true);
-            _hint.gameObject.SetActive(true);
-            EnterMenu();
+            var steps = new List<(string, Action)>(GamePreloader.Steps(story: false))
+            {
+                ("BOOTING THE LIVE FEED", () => { BuildHome(); Destroy(_splash); }),
+            };
+            LoadingScreen.Run(null, steps, EnterMenu);
         }
 
         void EnterMenu()
@@ -314,12 +371,18 @@ namespace DataHeist
 
         void Update()
         {
-            UpdateShowcase(Time.unscaledDeltaTime);
-            if (!_started)
+            if (_splash != null)
             {
-                UpdateGlitch(Time.unscaledDeltaTime);
-                _pressStart.alpha = Mathf.Repeat(Time.unscaledTime, 1.2f) < 0.8f ? 1f : 0.2f;
-                if (AnyPress()) PressStart();
+                UpdateSplash(Time.unscaledDeltaTime);
+                if (!_started && AnyPress()) PressStart();
+                return;
+            }
+            if (_menuRoot == null) return;
+            UpdateShowcase(Time.unscaledDeltaTime);
+            if (LoadingScreen.Active)
+            {
+                // nothing underneath the loading screen may take keyboard input
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
                 return;
             }
             // keep a selection when the mouse clicks empty space, so keyboard/gamepad never get lost
@@ -328,7 +391,7 @@ namespace DataHeist
             UpdateGlitch(Time.unscaledDeltaTime);
         }
 
-        void UpdateGlitch(float dt)
+        void UpdateGlitchTimer(float dt)
         {
             _glitchT -= dt;
             if (_glitchT <= 0)
@@ -336,12 +399,13 @@ namespace DataHeist
                 _glitchLeft = UnityEngine.Random.Range(0.08f, 0.22f);
                 _glitchT = UnityEngine.Random.Range(2.5f, 6f);
             }
-            float jitter = 0;
-            if (_glitchLeft > 0)
-            {
-                _glitchLeft -= dt;
-                jitter = UnityEngine.Random.Range(-3, 4);
-            }
+            if (_glitchLeft > 0) _glitchLeft -= dt;
+        }
+
+        void UpdateGlitch(float dt)
+        {
+            UpdateGlitchTimer(dt);
+            float jitter = _glitchLeft > 0 ? UnityEngine.Random.Range(-3, 4) : 0;
             var basePos = new Vector2(32, -48);
             _logoCyan.rectTransform.anchoredPosition = basePos + new Vector2(-1 - jitter, jitter * 0.3f);
             _logoPink.rectTransform.anchoredPosition = basePos + new Vector2(1 + jitter, 0);

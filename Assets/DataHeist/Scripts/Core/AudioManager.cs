@@ -92,6 +92,16 @@ namespace DataHeist
             return c;
         }
 
+        /// <summary>Loads and decodes every sound effect now, so the first jump or hit never stalls.</summary>
+        public void PreloadSfx()
+        {
+            foreach (var clip in Resources.LoadAll<AudioClip>(DH.Root + "Audio/SFX"))
+            {
+                clip.LoadAudioData();
+                _clips[DH.Root + "Audio/SFX/" + clip.name] = clip;
+            }
+        }
+
         /// <summary>Plays a music track that may not exist yet, falling back to another one.</summary>
         public void MusicOr(string name, string fallback, bool restart = false)
         {

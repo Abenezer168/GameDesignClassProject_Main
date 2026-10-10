@@ -156,12 +156,16 @@ namespace DataHeist.EditorTools
             SceneManager.LoadScene(DH.SceneMainMenu);
             yield return 2f;
             var title = Object.FindAnyObjectByType<MainMenuController>();
-            Check(title != null && GameObject.Find("PressStart") != null, "launch shows PRESS ANY KEY on the title");
-            AudioAudit("title before any key", 0);
-            foreach (var w in Shot("00_press_start")) yield return w;
+            Check(title != null && GameObject.Find("KeyArtSplash") != null && GameObject.Find("PressStart") != null, "launch shows the key-art splash with PRESS START");
+            Check(Object.FindAnyObjectByType<DemoPlayer>() == null, "nothing heavy is built before the player presses start");
+            AudioAudit("splash before any key", 0);
+            foreach (var w in Shot("00_splash")) yield return w;
             title?.SendMessage("PressStart");
-            yield return 2f;
-            Check(SceneManager.GetActiveScene().name == DH.SceneStory, "first key press on first launch opens the story");
+            yield return 0.9f;
+            Check(LoadingScreen.Active, "PRESS START opens the loading screen");
+            foreach (var w in Shot("00b_loading")) yield return w;
+            foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneStory && !LoadingScreen.Active, 10f)) yield return w;
+            Check(SceneManager.GetActiveScene().name == DH.SceneStory, "first launch: loading screen continues to the story");
             var story = Object.FindAnyObjectByType<StoryController>();
             Check(story != null, "story intro running");
             AudioAudit("story", 1);
@@ -255,24 +259,47 @@ namespace DataHeist.EditorTools
             Check(SceneManager.GetActiveScene().name == DH.SceneMainMenu && rerouted != null && rerouted.IsOpen,
                 "old OptionsScreenScene opens the new options panel");
 
+            // --- returning player: splash -> loading -> home page built under the loading screen
+            typeof(MainMenuController).GetField("_started", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static).SetValue(null, false);
+            AudioManager.I.StopMusic();
+            SceneManager.LoadScene(DH.SceneMainMenu);
+            yield return 1.5f;
+            Object.FindAnyObjectByType<MainMenuController>()?.SendMessage("PressStart");
+            yield return 1.2f;
+            foreach (var w in Shot("00c_loading_home")) yield return w;
+            foreach (var w in Until(() => !LoadingScreen.Active, 10f)) yield return w;
+            yield return 0.8f;
+            Check(Object.FindAnyObjectByType<DemoPlayer>() != null && GameObject.Find("KeyArtSplash") == null,
+                "returning player: loading screen builds the home page and removes the splash");
+            AudioAudit("home page after loading", 1);
+
             // --- play
             SceneFader.Load(DH.SceneCharacterSelect);
-            yield return 2f;
+            yield return 2.5f;
             Check(SceneManager.GetActiveScene().name == DH.SceneCharacterSelect, "character select loads");
             Check(Object.FindAnyObjectByType<CharacterSelectController>() != null, "character select running");
             AudioAudit("character select", 1);
             foreach (var w in Shot("07_character_select")) yield return w;
 
-            SceneFader.Load(DH.SceneLevel01);
-            yield return 2.2f;
+            Object.FindAnyObjectByType<CharacterSelectController>()?.SendMessage("Confirm");   // RUN AS ...
+            yield return 1.0f;
+            Check(LoadingScreen.Active, "starting a run shows the loading screen");
+            foreach (var w in Shot("07b_loading_level")) yield return w;
+            foreach (var w in Until(() => Object.FindAnyObjectByType<LevelController>() != null, 10f)) yield return w;
+            yield return 1.0f;
             AudioAudit("level 1 countdown", 0);
-            yield return 3.8f;
+            yield return 4.5f;
             var level = Object.FindAnyObjectByType<LevelController>();
             Check(level != null && level.Sim != null, "level 1 running");
             if (level != null && level.Sim != null) Check(level.Sim.p.x > 5f, $"runner is moving (x = {level.Sim.p.x:F1})");
             AudioAudit("level 1", 1);
             Check(AudioManager.I.CurrentMusic == "music_level01", "level music starts on GO");
             foreach (var w in Shot("08_level01")) yield return w;
+        }
+
+        static IEnumerable<float> Until(System.Func<bool> done, float timeout)
+        {
+            for (float t = 0; t < timeout && !done(); t += 0.1f) yield return 0.1f;
         }
 
         static AudioSource MusicSource()
