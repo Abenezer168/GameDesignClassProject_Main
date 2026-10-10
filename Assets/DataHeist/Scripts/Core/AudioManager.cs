@@ -56,13 +56,19 @@ namespace DataHeist
             if (_music != null) _music.volume = SaveSystem.Data.musicVolume * 0.55f * _musicDuck;
         }
 
-        AudioClip Clip(string path)
+        AudioClip Clip(string path, bool warnIfMissing = true)
         {
             if (_clips.TryGetValue(path, out var c)) return c;
             c = Resources.Load<AudioClip>(path);
-            if (c == null) Debug.LogWarning("[DataHeist] Missing audio Resources/" + path);
+            if (c == null && warnIfMissing) Debug.LogWarning("[DataHeist] Missing audio Resources/" + path);
             _clips[path] = c;
             return c;
+        }
+
+        /// <summary>Plays a music track that may not exist yet, falling back to another one.</summary>
+        public void MusicOr(string name, string fallback, bool restart = false)
+        {
+            Music(Clip(DH.MusicPath + name, false) != null ? name : fallback, restart);
         }
 
         public void Sfx(string name, float volume = 1f, float pitch = 1f)

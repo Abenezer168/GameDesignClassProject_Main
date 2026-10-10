@@ -20,10 +20,11 @@ namespace DataHeist.EditorTools
         {
             ReimportArt();
             CreateCharacterAssets();
+            CreateStoryScene();
             AddScenesToBuild();
             WireMainMenu();
             EditorUtility.DisplayDialog("The Data Heist",
-                "Setup complete.\n\n- Pixel art re-imported\n- Character definitions created\n- Character Select + Level 1 added to Build Settings\n- Main Menu PLAY now opens Character Select\n\nOpen MainMenuScreenScene and press Play.",
+                "Setup complete.\n\n- Pixel art re-imported\n- Character definitions created\n- Story, Character Select and Level 1 added to Build Settings\n- Title screen installs itself into MainMenuScreenScene\n\nOpen MainMenuScreenScene and press Play.",
                 "Run!");
         }
 
@@ -52,7 +53,20 @@ namespace DataHeist.EditorTools
             Debug.Log("[DataHeist] Character definitions ready in " + DefsDir + " (tweak stats in the Inspector).");
         }
 
-        [MenuItem("Data Heist/Add Scenes To Build Settings", priority = 3)]
+        /// <summary>Creates StoryScene (one GameObject with StoryController) if it does not exist yet.</summary>
+        [MenuItem("Data Heist/Create Story Scene", priority = 3)]
+        public static void CreateStoryScene()
+        {
+            string path = ScenesDir + DH.SceneStory + ".unity";
+            if (File.Exists(path)) { Debug.Log("[DataHeist] " + path + " already exists."); return; }
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject("Story").AddComponent<StoryController>();
+            EditorSceneManager.SaveScene(scene, path);
+            Debug.Log("[DataHeist] Created " + path);
+        }
+
+        [MenuItem("Data Heist/Add Scenes To Build Settings", priority = 4)]
         public static void AddScenesToBuild()
         {
             var scenes = EditorBuildSettings.scenes.ToList();
@@ -66,14 +80,15 @@ namespace DataHeist.EditorTools
             // Main menu must stay first so the build boots into it
             var main = scenes.FirstOrDefault(s => s.path.EndsWith(DH.SceneMainMenu + ".unity"));
             if (main != null) { scenes.Remove(main); main.enabled = true; scenes.Insert(0, main); }
-            Ensure(ScenesDir + DH.SceneCharacterSelect + ".unity", 1);
-            Ensure(ScenesDir + DH.SceneLevel01 + ".unity", 2);
+            Ensure(ScenesDir + DH.SceneStory + ".unity", 1);
+            Ensure(ScenesDir + DH.SceneCharacterSelect + ".unity", 2);
+            Ensure(ScenesDir + DH.SceneLevel01 + ".unity", 3);
             EditorBuildSettings.scenes = scenes.ToArray();
             Debug.Log("[DataHeist] Build Settings: " + string.Join(", ", scenes.Select(s => Path.GetFileNameWithoutExtension(s.path))));
         }
 
         /// <summary>Points the existing Main Menu PLAY button at Character Select.</summary>
-        [MenuItem("Data Heist/Wire Main Menu Play Button", priority = 4)]
+        [MenuItem("Data Heist/Wire Main Menu Play Button", priority = 5)]
         public static void WireMainMenu()
         {
             var path = EditorBuildSettings.scenes.Select(s => s.path).FirstOrDefault(p => p.EndsWith(DH.SceneMainMenu + ".unity"));
@@ -116,6 +131,14 @@ namespace DataHeist.EditorTools
             d.bytes += 1000;
             SaveSystem.Save();
             Debug.Log("[DataHeist] All runners unlocked.");
+        }
+
+        [MenuItem("Data Heist/Play Story", priority = 11)]
+        public static void PlayStory()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EditorSceneManager.OpenScene(ScenesDir + DH.SceneStory + ".unity");
+            EditorApplication.isPlaying = true;
         }
 
         [MenuItem("Data Heist/Debug/Reset Save Data", priority = 41)]

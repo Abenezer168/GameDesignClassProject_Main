@@ -23,6 +23,7 @@ namespace DataHeist.EditorTools
         static readonly List<string> Errors = new List<string>();
         static IEnumerator<float> _steps;
         static double _wakeAt;
+        static bool _storySeenBefore;
 
         [MenuItem("Data Heist/Debug/Smoke Test", priority = 42)]
         public static void Run() => Start(false);
@@ -51,6 +52,7 @@ namespace DataHeist.EditorTools
         {
             if (s != PlayModeStateChange.EnteredPlayMode) return;
             Errors.Clear();
+            _storySeenBefore = SaveSystem.Data.storySeen;   // PlayerPrefs are shared with normal play
             Application.logMessageReceived += OnLog;
             _steps = Steps();
             _wakeAt = 0;
@@ -88,6 +90,7 @@ namespace DataHeist.EditorTools
         {
             Switched.Clear();
             var cam = Camera.main;
+            if (cam != null) cam.aspect = 1280f / 720f;   // the batch window is 4:3; frame shots like a 16:9 screen
             foreach (var c in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
             {
                 if (!c.isRootCanvas || c.renderMode != RenderMode.ScreenSpaceOverlay) continue;
@@ -115,6 +118,7 @@ namespace DataHeist.EditorTools
                 tex.Apply();
                 RenderTexture.active = null;
                 cam.targetTexture = prev;
+                cam.ResetAspect();
                 System.IO.Directory.CreateDirectory("Logs/Screens");
                 System.IO.File.WriteAllBytes($"Logs/Screens/{name}.png", tex.EncodeToPNG());
                 Object.DestroyImmediate(tex);
@@ -162,7 +166,28 @@ namespace DataHeist.EditorTools
                 Check(!settings.IsOpen, "settings closes");
             }
 
-            SceneFader.Load(DH.SceneCharacterSelect);
+            SceneFader.Load(DH.SceneStory);
+            yield return 2.5f;
+            var story = Object.FindAnyObjectByType<StoryController>();
+            Check(story != null, "story intro loads");
+            if (story != null)
+            {
+                Check(story.ShotCount == 6, $"story has {story.ShotCount} shots");
+                for (int i = 0; i < story.ShotCount; i++)
+                {
+                    story.JumpTo(i);
+                    yield return i == 0 ? 0.5f : 3.2f;
+                    foreach (var w in Shot($"story_{i + 1}")) yield return w;
+                }
+                story.Next();               // finish the caption
+                story.Next();               // last shot -> title card
+                yield return 1.2f;
+                foreach (var w in Shot("story_7_titlecard")) yield return w;
+                yield return 3f;
+                Check(SaveSystem.Data.storySeen, "story marked as seen");
+            }
+
+            if (SceneManager.GetActiveScene().name != DH.SceneCharacterSelect) SceneFader.Load(DH.SceneCharacterSelect);
             yield return 2f;
             Check(SceneManager.GetActiveScene().name == DH.SceneCharacterSelect, "character select loads");
             Check(Object.FindAnyObjectByType<CharacterSelectController>() != null, "character select running");
@@ -180,6 +205,8 @@ namespace DataHeist.EditorTools
         {
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
+            SaveSystem.Data.storySeen = _storySeenBefore;
+            SaveSystem.Save();
             SessionState.SetBool(PrefKey, false);
             bool batch = SessionState.GetBool(BatchKey, false);
             if (Errors.Count == 0) Debug.Log("[SmokeTest] PASSED");

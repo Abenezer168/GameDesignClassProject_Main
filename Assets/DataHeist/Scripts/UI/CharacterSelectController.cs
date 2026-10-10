@@ -40,6 +40,7 @@ namespace DataHeist
             _index = Mathf.Max(0, IndexOf(GameSession.SelectedCharacter));
             BuildBackdrop();
             BuildUI(roster);
+            ScreenFX.Add(50, 0.55f, 0.07f);
             Refresh();
             AudioManager.I.Music("music_menu");
         }

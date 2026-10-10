@@ -23,6 +23,10 @@ namespace DataHeist
         SpriteRenderer[] _props;
         Sprite[] _droneFrames;
         float _camX, _droneT = 3f, _droneX, _droneY, _droneDir;
+        Transform _tower;
+        SpriteRenderer _towerBeacon;
+        SpriteRenderer[] _towerBeams;
+        float _towerScreenX;
 
         public static MenuBackdrop Create()
         {
@@ -65,12 +69,42 @@ namespace DataHeist
             _drone.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// Adds the Halcyon tower far behind the skyline (it stays put on screen like the moon),
+        /// with its beacon and sweeping searchlights, tying the menus to the story intro.
+        /// </summary>
+        public void AddTower(float screenX)
+        {
+            _towerScreenX = screenX;
+            _tower = new GameObject("HalcyonTower").transform;
+            _tower.SetParent(transform, false);
+            var body = SR.Make("Tower", _tower, SpriteLibrary.Get("Story/tower"), DH.SortFar + 2, new Vector3(0, -5f, 0));
+            body.color = new Color(0.62f, 0.55f, 0.82f);
+            _towerBeacon = SR.Make("Beacon", _tower, SpriteLibrary.Get("FX/glow"), DH.SortFar + 3, new Vector3(0, 8.85f, 0));
+            _towerBeacon.color = DH.Red;
+            _towerBeacon.transform.localScale = new Vector3(0.6f, 0.6f, 1);
+            _towerBeams = new SpriteRenderer[2];
+            for (int i = 0; i < 2; i++)
+            {
+                _towerBeams[i] = SR.Make("Searchlight", _tower, SpriteLibrary.Get("Story/searchlight"), DH.SortFar + 1, new Vector3(i == 0 ? -5f : 4f, 0.5f, 0));
+                _towerBeams[i].color = i == 0 ? new Color(1, 1, 1, 0.12f) : new Color(DH.Cyan.r, DH.Cyan.g, DH.Cyan.b, 0.14f);
+            }
+        }
+
         void Update()
         {
             float dt = Time.unscaledDeltaTime;
             _camX += dt * cruiseSpeed;
             float halfH = DH.OrthoSize, halfW = halfH * Camera.main.aspect;
             _cam.position = new Vector3(SR.Snap(_camX), SR.Snap(halfH - 1.7f), -10);
+            if (_tower != null)
+            {
+                _tower.position = new Vector3(SR.Snap(_camX - halfW + halfW * 2 * _towerScreenX), 0, 0);
+                float t = Time.unscaledTime;
+                _towerBeacon.enabled = Mathf.Repeat(t, 1.4f) < 0.7f;
+                for (int i = 0; i < _towerBeams.Length; i++)
+                    _towerBeams[i].transform.localRotation = Quaternion.Euler(0, 0, 180f + Mathf.Sin(t * (0.3f + i * 0.17f) + i * 2f) * 26f);
+            }
             Wrap(_ledge, 0.06f);
             Wrap(_facade, -0.44f);
             float left = _camX - halfW - 2f, furthest = left;

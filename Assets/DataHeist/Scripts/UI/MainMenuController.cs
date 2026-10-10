@@ -31,7 +31,9 @@ namespace DataHeist
             var backdrop = MenuBackdrop.Create();
             backdrop.runnerId = GameSession.SelectedCharacter;
             backdrop.runnerScreenX = 0.74f;
+            backdrop.AddTower(0.66f);
             BuildUI();
+            ScreenFX.Add();
             AudioManager.I.Music("music_menu");
             SceneFader.FadeIn(0.6f);
         }

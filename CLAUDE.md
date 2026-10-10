@@ -23,7 +23,7 @@ There is no CLI build/lint/test pipeline; work happens in the Unity Editor via t
 - **Data Heist > Play Level 1** — jump straight into the level.
 - **Data Heist > Validate Level 1 (Playtest Bot)** — the closest thing to a test suite. Beam-searches inputs through the real `RunnerSim` and must find a zero-hit, no-ability clear for every runner. Run it after any change to `RunnerSim` or the level JSON.
 - **Data Heist > Debug > Unlock All Runners + 1000 Bytes** / **Reset Save Data**.
-- **Data Heist > Debug > Smoke Test**: a play-mode run through the title screen, Settings, Character Select and Level 1. It fails on any console error and writes screenshots to `Logs/Screens/`.
+- **Data Heist > Debug > Smoke Test**: a play-mode run through the title screen, Settings, all story shots, Character Select and Level 1. It fails on any console error and writes screenshots to `Logs/Screens/`.
 
 Both checks also run headless. This only works while the project is **not** open in an editor; the user's editor may have the nested clone open, which is fine:
 ```bash
@@ -57,5 +57,7 @@ cd Tools/WebPrototype && node bot.js ../../Assets/DataHeist/Resources/DataHeist/
 - Runners: `CharacterDefinition` ScriptableObjects in `Resources/DataHeist/CharacterDefs` (stats, ability, unlock rule) loaded via `CharacterDefinition.All`.
 - Sprites: `SpriteLibrary` loads by path and auto-discovers numbered animation frames (`<char>_<anim>_NN.png`).
 - Persistence: `SaveSystem` (wallet, unlocks, best results) and `RunnerInput` key rebinds are both JSON in `PlayerPrefs`.
+
+**Menus and story.** The title screen (`MainMenuController`), Character Select and the story intro (`Scripts/Story/`, StoryScene) are all built at runtime with `UIKit`. They share `MenuBackdrop` and `Parallax` for the city, `ScreenFX` for the vignette and scanlines, and `SceneFader.Load` for transitions. Story shots are `StoryShot` subclasses staged side by side along x, and story art comes from `gen_story.py`. Overlay-canvas UI can't be positioned with `WorldToScreenPoint` in tests, so world-pinned UI uses viewport maths.
 
 **Level design invariants** the bot and README enforce: coyote time of 0.10 s, a jump buffer of 0.12 s, gunner bolts at standing-chest height, a slide never stands you up under a ceiling, and i-frames after every hit.

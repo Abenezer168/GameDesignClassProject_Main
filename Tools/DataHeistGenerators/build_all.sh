@@ -9,6 +9,7 @@ mkdir -p "$RES"/{Characters,Levels,Fonts,Audio/SFX,Audio/Music}
 
 python3 $TOOLS/gen_characters.py "$RES/Characters" /tmp/dh_prev >/dev/null
 python3 $TOOLS/gen_env.py "$RES"
+python3 $TOOLS/gen_story.py "$RES"
 python3 $TOOLS/gen_level.py "$RES/Levels/level01.json"
 python3 $TOOLS/gen_audio.py /tmp/dh_audio >/dev/null
 cp /tmp/dh_audio/SFX/*.wav "$RES/Audio/SFX/"
