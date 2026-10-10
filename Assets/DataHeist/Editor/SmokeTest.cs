@@ -186,9 +186,10 @@ namespace DataHeist.EditorTools
             Check(SceneManager.GetActiveScene().name == DH.SceneMainMenu, "story ends on the home page");
             yield return 0.5f;
             foreach (var w in Shot("01_title")) yield return w;
-            Check(Object.FindAnyObjectByType<MainMenuController>() != null, "title menu installed into " + DH.SceneMainMenu);
-            var legacy = GameObject.Find("Canvas");
-            Check(legacy == null || !legacy.activeInHierarchy, "legacy main menu canvas hidden");
+            Check(Object.FindAnyObjectByType<MainMenuController>() != null, "home page running in " + DH.SceneMainMenu);
+            var demo = Object.FindAnyObjectByType<DemoPlayer>();
+            Check(demo != null && demo.Sim != null && demo.Sim.p.x > 3f, $"attract demo is playing Level 1 (x = {(demo != null && demo.Sim != null ? demo.Sim.p.x : 0):F1})");
+            Check(demo != null && demo.Sim.stats.hits == 0, "demo run replays cleanly (no hits)");
             AudioAudit("home page", 1);
             Check(GameObject.Find("PressStart") == null, "home page goes straight to the menu after the first press");
 

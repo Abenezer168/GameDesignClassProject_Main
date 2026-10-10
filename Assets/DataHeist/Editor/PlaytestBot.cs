@@ -13,21 +13,18 @@ namespace DataHeist.EditorTools
     public static class PlaytestBot
     {
         const float Dt = 1f / 120f;
-        const int Ticks = 9;
+        const int Ticks = DemoActions.DecisionTicks;
         const int Beam = 24;
 
-        struct Act { public string name; public bool pressJ, holdJ, pressS, holdS, attack; }
+        // the action vocabulary lives in DemoActions so recorded routes replay identically at runtime
+        public static RunnerInputFrame Frame(int a, int k) => DemoActions.Frame(a, k);
 
-        static readonly Act[] Actions =
-        {
-            new Act { name = "idle" },
-            new Act { name = "jump", pressJ = true, holdJ = true },
-            new Act { name = "holdJ", holdJ = true },
-            new Act { name = "tapJ", pressJ = true },
-            new Act { name = "slide", pressS = true, holdS = true },
-            new Act { name = "holdS", holdS = true },
-            new Act { name = "attack", attack = true },
-        };
+        // persistent linked list of decisions, so beam nodes share their history
+        class Path { public int act; public Path prev; public float effort; }
+
+        // "natural" runs pay for every input, so among equally good routes the calm one wins:
+        // idle, idle, idle ... jump exactly where needed (idle, jump, holdJ, tapJ, slide, holdS, attack)
+        static readonly float[] Effort = { 0f, 0.3f, 0.05f, 0.3f, 0.3f, 0.05f, 0.3f };
 
         public struct Result
         {
@@ -36,56 +33,101 @@ namespace DataHeist.EditorTools
             public float time, failX;
             public int bytes, totalBytes, drones;
             public string rank;
+            /// <summary>Winning route as one digit (action index) per decision.</summary>
+            public string route;
         }
 
-        public static Result Run(LevelData level, CharacterDefinition ch)
+        public static Result Run(LevelData level, CharacterDefinition ch, bool natural = false)
         {
-            var beam = new List<RunnerSim> { new RunnerSim(level, ch) };
+            _natural = natural;
+            var beam = new List<(RunnerSim sim, Path path)> { (new RunnerSim(level, ch), null) };
             while (true)
             {
-                var next = new List<RunnerSim>();
+                var next = new List<(RunnerSim sim, Path path)>();
                 foreach (var node in beam)
                 {
-                    foreach (var a in Actions)
+                    for (int ai = 0; ai < DemoActions.Count; ai++)
                     {
-                        var s = node.Clone();
+                        var s = node.sim.Clone();
                         bool ok = true;
                         for (int k = 0; k < Ticks; k++)
                         {
-                            s.Step(Dt, new RunnerInputFrame
-                            {
-                                jumpPressed = k == 0 && a.pressJ, jumpHeld = a.holdJ,
-                                slidePressed = k == 0 && a.pressS, slideHeld = a.holdS,
-                                attackPressed = k == 0 && a.attack,
-                            });
+                            s.Step(Dt, Frame(ai, k));
                             s.events.Clear();
                             if (s.stats.hits > 0 || s.state == SimState.Dead) { ok = false; break; }
                             if (s.state == SimState.Won) break;
                         }
-                        if (ok) next.Add(s);
+                        if (ok) next.Add((s, new Path { act = ai, prev = node.path, effort = (node.path?.effort ?? 0) + (natural ? Effort[ai] : 0) }));
                     }
                 }
                 if (next.Count == 0)
-                    return new Result { character = ch.id, cleared = false, failX = beam[0].p.x, time = beam[0].time };
-                var won = next.Find(n => n.state == SimState.Won);
-                if (won != null)
+                    return new Result { character = ch.id, cleared = false, failX = beam[0].sim.p.x, time = beam[0].sim.time };
+                var won = next.Find(n => n.sim.state == SimState.Won);
+                if (won.sim != null)
+                {
+                    var w = won.sim;
                     return new Result
                     {
-                        character = ch.id, cleared = true, time = won.time, bytes = won.stats.bytes,
-                        totalBytes = won.totalBytes, drones = won.stats.drones, rank = won.Rank(),
+                        character = ch.id, cleared = true, time = w.time, bytes = w.stats.bytes,
+                        totalBytes = w.totalBytes, drones = w.stats.drones, rank = w.Rank(),
+                        route = Route(won.path),
                     };
-                next.Sort((a, b) => (b.stats.bytes * 3 + b.p.x).CompareTo(a.stats.bytes * 3 + a.p.x));
+                }
+                next.Sort((a, b) => Score(b).CompareTo(Score(a)));
                 var seen = new HashSet<string>();
-                beam = new List<RunnerSim>();
+                beam = new List<(RunnerSim, Path)>();
                 foreach (var n in next)
                 {
-                    var p = n.p;
-                    string key = $"{p.x:F1}|{p.y:F1}|{p.vy:F0}|{p.sliding}|{p.attackCD > 0}|{n.stats.bytes}";
+                    var p = n.sim.p;
+                    string key = $"{p.x:F1}|{p.y:F1}|{p.vy:F0}|{p.sliding}|{p.attackCD > 0}|{n.sim.stats.bytes}";
                     if (!seen.Add(key)) continue;
                     beam.Add(n);
                     if (beam.Count >= Beam) break;
                 }
             }
+        }
+
+        static bool _natural;
+
+        // natural runs also take drones down, so the demo shows every verb of the game
+        static float Score((RunnerSim sim, Path path) n) =>
+            n.sim.stats.bytes * 3 + n.sim.p.x - (n.path?.effort ?? 0) + (_natural ? n.sim.stats.drones * 4 : 0);
+
+        static string Route(Path p)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (; p != null; p = p.prev) sb.Insert(0, (char)('0' + p.act));
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Records the bot's clean Level 1 run for every runner into Resources/DataHeist/Demo; the
+        /// title screen replays them through the real simulation as its attract-mode background.
+        /// </summary>
+        [MenuItem("Data Heist/Record Title Screen Demo", priority = 21)]
+        public static void RecordDemo()
+        {
+            var level = LevelData.Load("level01");
+            if (level == null) return;
+            const string dir = "Assets/DataHeist/Resources/DataHeist/Demo";
+            System.IO.Directory.CreateDirectory(dir);
+            foreach (var ch in CharacterDefinition.All)
+            {
+                var r = Run(level, ch, natural: true);
+                if (!r.cleared) { Debug.LogError($"[PlaytestBot] {ch.id}: no clean run to record."); continue; }
+                // replay exactly the way DemoPlayer will, and refuse a route that doesn't finish clean
+                var sim = new RunnerSim(level, ch);
+                for (int d = 0; d < r.route.Length && sim.state == SimState.Running; d++)
+                    for (int k = 0; k < Ticks && sim.state == SimState.Running; k++) { sim.Step(Dt, Frame(r.route[d] - '0', k)); sim.events.Clear(); }
+                if (sim.state != SimState.Won || sim.stats.hits > 0)
+                {
+                    Debug.LogError($"[PlaytestBot] {ch.id}: recorded route does not replay cleanly ({sim.state}, {sim.stats.hits} hits).");
+                    continue;
+                }
+                System.IO.File.WriteAllText($"{dir}/level01_{ch.id}.txt", r.route);
+                Debug.Log($"[PlaytestBot] Recorded {ch.id}: {r.route.Length} decisions, {r.time:F1}s, rank {r.rank}, {r.drones} drones; replay verified");
+            }
+            AssetDatabase.Refresh();
         }
 
         [MenuItem("Data Heist/Validate Level 1 (Playtest Bot)", priority = 20)]

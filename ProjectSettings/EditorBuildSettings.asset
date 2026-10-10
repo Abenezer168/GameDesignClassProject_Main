@@ -6,8 +6,8 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/MainMenuScreenScene.unity
-    guid: 921a9b44ddd960b4c9b80f1d8d4097ed
+    path: Assets/DataHeist/Scenes/MainMenu.unity
+    guid: 6ce5e24b22f584a16b227dfd0f3a5df3
   - enabled: 1
     path: Assets/DataHeist/Scenes/StoryScene.unity
     guid: bbf733f9bde444cd88842a62094f4fb1
@@ -17,9 +17,6 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/DataHeist/Scenes/Level01_NeonRooftops.unity
     guid: d7e13b2c99e04d0bbb6c4dab4aad454c
-  - enabled: 0
-    path: Assets/Scenes/SampleScene.unity
-    guid: 99c9720ab356a0642a771bea13969a05
   - enabled: 1
     path: Assets/Scenes/GameScreenScene.unity
     guid: 6d5c99c2820cbde4093caa7e8cd9822a

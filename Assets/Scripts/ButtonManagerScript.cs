@@ -25,7 +25,7 @@ public class ButtonManagerScript: MonoBehaviour
         else
         {
             Debug.Log("No previous scene recorded, loading Main Menu instead.");
-            SceneManager.LoadScene("MainMenuScreenScene"); 
+            SceneManager.LoadScene("MainMenu"); 
         }
     }
     public void QuitGame()

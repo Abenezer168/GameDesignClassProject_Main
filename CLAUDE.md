@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository layout
 
 - `Assets/DataHeist/` — essentially all game code and content (namespace `DataHeist`; editor code in `DataHeist.EditorTools`). No asmdefs, so everything compiles into `Assembly-CSharp` / `Assembly-CSharp-Editor`.
-- `Assets/Scenes/` + `Assets/Scripts/ButtonManagerScript.cs` — the team's original menu scenes (MainMenu, Options, Shop, GameScreen, GameOver) using plain scene-name-string navigation. `MainMenuScreenScene` is still the boot scene, but at load time `MainMenuInstaller` (in `MainMenuController.cs`) hides its old Canvas and builds the Data Heist title screen in code. Settings live in `SettingsPanel`, so the old Options/Shop scenes are no longer reached from the menu.
+- `Assets/Scenes/` + `Assets/Scripts/ButtonManagerScript.cs` — the team's original Options/Shop/GameScreen/GameOver scenes (plain scene-name-string navigation). Their old main menu was replaced by `Assets/DataHeist/Scenes/MainMenu` (the boot scene). `LegacySceneRouter` (in `MainMenuController.cs`) reroutes the remaining old scenes to the new home page's Options/Shop or Character Select.
 - `Tools/DataHeistGenerators/` — Python generators that produce all art, audio and level JSON.
 - `Tools/WebPrototype/` — standalone browser build of Level 1 (`the-data-heist.html`).
 - `Plugins/Libraries/` — a third-party helper library (BugFreeProductionsLibrary) sitting **outside `Assets/`**, so Unity does not compile it and the game doesn't use it.
@@ -57,6 +57,8 @@ cd Tools/WebPrototype && node bot.js ../../Assets/DataHeist/Resources/DataHeist/
 - Runners: `CharacterDefinition` ScriptableObjects in `Resources/DataHeist/CharacterDefs` (stats, ability, unlock rule) loaded via `CharacterDefinition.All`.
 - Sprites: `SpriteLibrary` loads by path and auto-discovers numbered animation frames (`<char>_<anim>_NN.png`).
 - Persistence: `SaveSystem` (wallet, unlocks, best results) and `RunnerInput` key rebinds are both JSON in `PlayerPrefs`.
+
+**Home page attract demo.** `DemoPlayer` replays `Resources/DataHeist/Demo/level01_<runner>.txt` (one `DemoActions` index per 9 sim ticks) through the real `RunnerSim` behind the menu. Those routes are recorded by the playtest bot (**Data Heist > Record Title Screen Demo**). Any change to Level 1 or to sim physics desyncs them, so re-record after such a change.
 
 **Menus and story.** The title screen (`MainMenuController`), Character Select and the story intro (`Scripts/Story/`, StoryScene) are all built at runtime with `UIKit`. They share `MenuBackdrop` and `Parallax` for the city, `ScreenFX` for the vignette and scanlines, and `SceneFader.Load` for transitions. Story shots are `StoryShot` subclasses staged side by side along x, and story art comes from `gen_story.py`. Overlay-canvas UI can't be positioned with `WorldToScreenPoint` in tests, so world-pinned UI uses viewport maths.
 

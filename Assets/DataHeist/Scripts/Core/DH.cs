@@ -18,7 +18,7 @@ namespace DataHeist
         public const string CharacterDefsPath = Root + "CharacterDefs";
 
         // Scene names (must be in Build Settings - Data Heist > Setup Project adds them)
-        public const string SceneMainMenu = "MainMenuScreenScene";
+        public const string SceneMainMenu = "MainMenu";
         public const string SceneCharacterSelect = "CharacterSelectScene";
         public const string SceneLevel01 = "Level01_NeonRooftops";
         public const string SceneStory = "StoryScene";

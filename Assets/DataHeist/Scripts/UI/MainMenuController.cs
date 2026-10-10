@@ -3,16 +3,18 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace DataHeist
 {
     /// <summary>
-    /// The Data Heist title screen, built entirely at runtime: living city backdrop, glitching
-    /// logo, PLAY / STORY / SHOP / OPTIONS / QUIT, wallet and best rank.
-    /// It installs itself into MainMenuScreenScene (see MainMenuInstaller), so the team's scene
-    /// file never has to be edited.
+    /// The Data Heist home page (MainMenu scene), built entirely at runtime. Behind the menu the
+    /// real Level 1 plays itself (DemoPlayer replays a recorded clean run through the actual
+    /// simulation), a "HOW TO RUN" card lights up each control as the demo runner uses it, and the
+    /// Halcyon tower looms on the skyline: the screen shows what the game is before you press a key.
+    /// Menu: PLAY / STORY / SHOP / OPTIONS / QUIT, plus wallet and best rank.
     /// </summary>
     public class MainMenuController : MonoBehaviour
     {
@@ -30,7 +32,13 @@ namespace DataHeist
         TextMeshProUGUI _logo, _logoCyan, _logoPink, _desc;
         SettingsPanel _settings;
         ShopPanel _shop;
-        MenuBackdrop _backdrop;
+        MenuBackdrop _backdrop;          // fallback when no demo route is recorded
+        DemoPlayer _demo;
+        RunnerInput _input;              // only for showing the player's key bindings
+        TextMeshProUGUI _live;
+        readonly List<(SimEventType[] events, Image key, TextMeshProUGUI keyText, TextMeshProUGUI verb, InputAction action)> _controls =
+            new List<(SimEventType[], Image, TextMeshProUGUI, TextMeshProUGUI, InputAction)>();
+        readonly Dictionary<Image, float> _flash = new Dictionary<Image, float>();
         TextMeshProUGUI _walletText, _bestText;
         GameObject _menuRoot;
         float _glitchT = 2f, _glitchLeft;
@@ -38,10 +46,22 @@ namespace DataHeist
 
         void Start()
         {
-            _backdrop = MenuBackdrop.Create();
-            _backdrop.runnerId = GameSession.SelectedCharacter;
-            _backdrop.runnerScreenX = 0.74f;
-            _backdrop.AddTower(0.66f);
+            // runner sits right of the menu column with 12 units of track visible ahead
+            _demo = DemoPlayer.Create(GameSession.SelectedCharacter, 8f);
+            if (_demo != null)
+            {
+                HalcyonSkyline.Create(Camera.main.transform, 0.68f);
+                _demo.OnSimEvent += OnDemoEvent;
+            }
+            else
+            {
+                _backdrop = MenuBackdrop.Create();
+                _backdrop.runnerId = GameSession.SelectedCharacter;
+                _backdrop.runnerScreenX = 0.74f;
+                _backdrop.AddTower(0.66f);
+            }
+            _input = new RunnerInput();
+            _input.Map.Disable();
             BuildUI();
             ScreenFX.Add();
             SceneFader.FadeIn(0.6f);
@@ -71,10 +91,12 @@ namespace DataHeist
             _logoCyan = LogoLayer(menu, DH.Cyan, new Vector2(-1, 0));
             _logoPink = LogoLayer(menu, DH.Pink, new Vector2(1, 0));
             _logo = LogoLayer(menu, DH.Ink, Vector2.zero);
-            var tag = UIKit.Text("Tagline", menu, "STEAL THE SHARDS.  OWN THE NIGHT.", 6, DH.Dim);
-            tag.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -86), new Vector2(300, 10));
+            var tag = UIKit.Text("Tagline", menu, "STEAL THE SHARDS.  OWN THE NIGHT.", 6, DH.Ink);
+            tag.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -84), new Vector2(300, 10));
+            var genre = UIKit.Text("Genre", menu, "A CYBERPUNK ROOFTOP AUTO-RUNNER", 5, DH.Dim);
+            genre.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -96), new Vector2(300, 8));
             var line = UIKit.Image("Rule", menu, DH.Pink);
-            line.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -102), new Vector2(64, 2));
+            line.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -110), new Vector2(64, 2));
 
             // menu
             var items = new[]
@@ -88,7 +110,7 @@ namespace DataHeist
             for (int i = 0; i < items.Length; i++)
             {
                 int index = i;
-                var b = MenuButton(menu, items[i].label, new Vector2(34, -126 - i * 24), items[i].action);
+                var b = MenuButton(menu, items[i].label, new Vector2(34, -128 - i * 24), items[i].action);
                 b.gameObject.AddComponent<MenuItemFx>().OnSelected = () => OnSelect(index);
                 _buttons.Add(b);
                 _descriptions.Add(items[i].description);
@@ -119,13 +141,86 @@ namespace DataHeist
             _hint = UIKit.Text("Hint", menu, "UP/DOWN  NAVIGATE      ENTER  SELECT", 5, new Color(1, 1, 1, 0.45f));
             _hint.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(34, 16), new Vector2(300, 10));
 
+            BuildShowcase(menu);
+
             _settings = SettingsPanel.Create(root);
-            _settings.OnClosed += () => { _menuRoot.SetActive(true); UIKit.Select(_buttons[3]); };
+            _settings.OnClosed += () => { _menuRoot.SetActive(true); _input.LoadOverrides(); RefreshKeys(); UIKit.Select(_buttons[3]); };
             _shop = ShopPanel.Create(root);
             _shop.OnClosed += () => { _menuRoot.SetActive(true); UIKit.Select(_buttons[2]); };
-            _shop.OnChanged += () => { RefreshProgress(); _backdrop.runnerId = GameSession.SelectedCharacter; };
+            _shop.OnChanged += () =>
+            {
+                RefreshProgress();
+                if (_demo != null) _demo.SetCharacter(GameSession.SelectedCharacter);
+                else _backdrop.runnerId = GameSession.SelectedCharacter;
+            };
 
         }
+
+        // ------------------------------------------------------------------ showcase
+        /// <summary>"LIVE" feed tag and the HOW TO RUN card that mirrors the demo runner's moves.</summary>
+        void BuildShowcase(RectTransform menu)
+        {
+            _live = UIKit.Text("LiveTag", menu, "", 5, DH.Ink, TextAlignmentOptions.Center);
+            _live.textWrappingMode = TextWrappingModes.NoWrap;
+            _live.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -14), new Vector2(240, 8));
+            _live.gameObject.SetActive(_demo != null);
+
+            var card = UIKit.Panel("HowToRun", menu, DH.Cyan);
+            card.rectTransform.Place(new Vector2(1, 0), new Vector2(1, 0), new Vector2(-16, 16), new Vector2(150, 92));
+            var r = card.rectTransform;
+            var head = UIKit.Text("Head", r, "HOW TO RUN", 6, DH.Cyan);
+            head.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -9), new Vector2(130, 8));
+            var sub = UIKit.Text("Sub", r, "YOU RUN ON YOUR OWN. YOU CONTROL:", 4, DH.Dim);
+            sub.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -19), new Vector2(136, 6));
+            void Row(int i, InputAction action, string verb, params SimEventType[] events)
+            {
+                float y = -30 - i * 14;
+                var key = UIKit.Image("Key", r, DH.PurpleLine);
+                key.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, y), new Vector2(40, 11));
+                var keyText = UIKit.Text("KeyLabel", key.rectTransform, "", 5, DH.Ink, TextAlignmentOptions.Center);
+                keyText.rectTransform.Stretch();
+                var v = UIKit.Text("Verb", r, verb, 5, DH.Ink);
+                v.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(56, y - 2), new Vector2(90, 8));
+                _controls.Add((events, key, keyText, v, action));
+            }
+            Row(0, _input.Jump, "JUMP GAPS", SimEventType.Jump, SimEventType.AirJump);
+            Row(1, _input.Slide, "SLIDE UNDER", SimEventType.Slide, SimEventType.Dive);
+            Row(2, _input.Attack, "SLASH DRONES", SimEventType.Attack, SimEventType.Deflect);
+            Row(3, _input.Ability, "RUNNER ABILITY", SimEventType.Dash, SimEventType.Emp, SimEventType.Glitch);
+            RefreshKeys();
+        }
+
+        void RefreshKeys()
+        {
+            foreach (var c in _controls) c.keyText.text = RunnerInput.KeyLabel(c.action);
+        }
+
+        void OnDemoEvent(SimEventType type)
+        {
+            foreach (var c in _controls)
+                if (Array.IndexOf(c.events, type) >= 0) _flash[c.key] = 1f;
+        }
+
+        void UpdateShowcase(float dt)
+        {
+            foreach (var c in _controls)
+            {
+                _flash.TryGetValue(c.key, out float k);
+                k = Mathf.Max(0, k - dt / 0.45f);
+                _flash[c.key] = k;
+                c.key.color = Color.Lerp(DH.PurpleLine, DH.Cyan, k);
+                c.keyText.color = Color.Lerp(DH.Ink, DH.Night, k);
+                c.verb.color = Color.Lerp(DH.Ink, DH.Cyan, k);
+            }
+            if (_demo != null && _demo.Sim != null)
+            {
+                bool rec = Mathf.Repeat(Time.unscaledTime, 1f) < 0.55f;
+                int metres = Mathf.Max(0, Mathf.RoundToInt(_demo.Sim.p.x));
+                _live.text = $"<color=#ff2d55>{(rec ? "REC" : "   ")}</color>  LIVE  //  {_demo.Level.name}  //  {metres} M";
+            }
+        }
+
+        void OnDestroy() => _input?.Dispose();
 
         void ShowPressStart()
         {
@@ -134,7 +229,7 @@ namespace DataHeist
             _desc.gameObject.SetActive(false);
             _hint.gameObject.SetActive(false);
             _pressStart = UIKit.Text("PressStart", (RectTransform)_menuRoot.transform, "PRESS ANY KEY", 9, DH.Cyan);
-            _pressStart.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -150), new Vector2(300, 14));
+            _pressStart.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -152), new Vector2(300, 14));
         }
 
         /// <summary>Player pressed a key on the title: story on first launch, otherwise the menu.</summary>
@@ -219,6 +314,7 @@ namespace DataHeist
 
         void Update()
         {
+            UpdateShowcase(Time.unscaledDeltaTime);
             if (!_started)
             {
                 UpdateGlitch(Time.unscaledDeltaTime);
@@ -339,15 +435,11 @@ namespace DataHeist
     }
 
     /// <summary>
-    /// Puts the Data Heist title screen into MainMenuScreenScene at load time: the team's old
-    /// canvas and its manager are switched off (not deleted), so the scene file stays untouched.
-    /// The title waits for a key press; on first launch that press plays the story intro, which
-    /// returns here when it ends or is skipped.
+    /// The team's original Options / Shop / GameScreen / GameOver scenes now live inside the home
+    /// page; if one of them is loaded, send the player to the new screen instead of dead buttons.
     /// </summary>
-    static class MainMenuInstaller
+    static class LegacySceneRouter
     {
-        static readonly string[] LegacyRoots = { "Canvas", "MainMenuManagerScript" };
-
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Hook()
         {
@@ -357,19 +449,13 @@ namespace DataHeist
 
         static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            // the team's old screens now live inside the title screen: route them there
             switch (scene.name)
             {
-                case "OptionsScreenScene": Reroute(scene, DH.SceneMainMenu, "options"); return;
-                case "ShopScreenScene": Reroute(scene, DH.SceneMainMenu, "shop"); return;
-                case "GameScreenScene": Reroute(scene, DH.SceneCharacterSelect, null); return;
-                case "GameOverScreenScene": Reroute(scene, DH.SceneMainMenu, null); return;
+                case "OptionsScreenScene": Reroute(scene, DH.SceneMainMenu, "options"); break;
+                case "ShopScreenScene": Reroute(scene, DH.SceneMainMenu, "shop"); break;
+                case "GameScreenScene": Reroute(scene, DH.SceneCharacterSelect, null); break;
+                case "GameOverScreenScene": Reroute(scene, DH.SceneMainMenu, null); break;
             }
-            if (scene.name != DH.SceneMainMenu) return;
-            if (UnityEngine.Object.FindAnyObjectByType<MainMenuController>() != null) return;
-            foreach (var go in scene.GetRootGameObjects())
-                if (Array.IndexOf(LegacyRoots, go.name) >= 0) go.SetActive(false);
-            new GameObject("DataHeist Main Menu").AddComponent<MainMenuController>();
         }
 
         static void Reroute(Scene from, string to, string openPanel)

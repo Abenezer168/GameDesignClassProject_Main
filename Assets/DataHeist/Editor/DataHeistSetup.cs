@@ -20,11 +20,11 @@ namespace DataHeist.EditorTools
         {
             ReimportArt();
             CreateCharacterAssets();
+            CreateMainMenuScene();
             CreateStoryScene();
             AddScenesToBuild();
-            WireMainMenu();
             EditorUtility.DisplayDialog("The Data Heist",
-                "Setup complete.\n\n- Pixel art re-imported\n- Character definitions created\n- Story, Character Select and Level 1 added to Build Settings\n- Title screen installs itself into MainMenuScreenScene\n\nOpen MainMenuScreenScene and press Play.",
+                "Setup complete.\n\n- Pixel art re-imported\n- Character definitions created\n- Home page, Story, Character Select and Level 1 in Build Settings\n\nOpen Assets/DataHeist/Scenes/MainMenu and press Play.",
                 "Run!");
         }
 
@@ -53,8 +53,33 @@ namespace DataHeist.EditorTools
             Debug.Log("[DataHeist] Character definitions ready in " + DefsDir + " (tweak stats in the Inspector).");
         }
 
+        /// <summary>
+        /// Creates the MainMenu home page scene (one GameObject with MainMenuController) and retires
+        /// the team's old MainMenuScreenScene, which it replaces.
+        /// </summary>
+        [MenuItem("Data Heist/Create Main Menu Scene", priority = 3)]
+        public static void CreateMainMenuScene()
+        {
+            string path = ScenesDir + DH.SceneMainMenu + ".unity";
+            if (!File.Exists(path))
+            {
+                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                new GameObject("MainMenu").AddComponent<MainMenuController>();
+                EditorSceneManager.SaveScene(scene, path);
+                Debug.Log("[DataHeist] Created " + path);
+            }
+            if (File.Exists(LegacyMainMenu))
+            {
+                AssetDatabase.DeleteAsset(LegacyMainMenu);
+                Debug.Log("[DataHeist] Deleted the old " + LegacyMainMenu + " (replaced by " + path + ").");
+            }
+        }
+
+        const string LegacyMainMenu = "Assets/Scenes/MainMenuScreenScene.unity";
+
         /// <summary>Creates StoryScene (one GameObject with StoryController) if it does not exist yet.</summary>
-        [MenuItem("Data Heist/Create Story Scene", priority = 3)]
+        [MenuItem("Data Heist/Create Story Scene", priority = 4)]
         public static void CreateStoryScene()
         {
             string path = ScenesDir + DH.SceneStory + ".unity";
@@ -66,7 +91,7 @@ namespace DataHeist.EditorTools
             Debug.Log("[DataHeist] Created " + path);
         }
 
-        [MenuItem("Data Heist/Add Scenes To Build Settings", priority = 4)]
+        [MenuItem("Data Heist/Add Scenes To Build Settings", priority = 5)]
         public static void AddScenesToBuild()
         {
             var scenes = EditorBuildSettings.scenes.ToList();
@@ -77,42 +102,14 @@ namespace DataHeist.EditorTools
                 var entry = new EditorBuildSettingsScene(path, true);
                 if (index >= 0 && index <= scenes.Count) scenes.Insert(index, entry); else scenes.Add(entry);
             }
-            // Main menu must stay first so the build boots into it
-            var main = scenes.FirstOrDefault(s => s.path.EndsWith(DH.SceneMainMenu + ".unity"));
-            if (main != null) { scenes.Remove(main); main.enabled = true; scenes.Insert(0, main); }
+            // the home page must stay first so the build boots into it; missing scenes are dropped
+            scenes.RemoveAll(s => !File.Exists(s.path));
+            Ensure(ScenesDir + DH.SceneMainMenu + ".unity", 0);
             Ensure(ScenesDir + DH.SceneStory + ".unity", 1);
             Ensure(ScenesDir + DH.SceneCharacterSelect + ".unity", 2);
             Ensure(ScenesDir + DH.SceneLevel01 + ".unity", 3);
             EditorBuildSettings.scenes = scenes.ToArray();
             Debug.Log("[DataHeist] Build Settings: " + string.Join(", ", scenes.Select(s => Path.GetFileNameWithoutExtension(s.path))));
-        }
-
-        /// <summary>Points the existing Main Menu PLAY button at Character Select.</summary>
-        [MenuItem("Data Heist/Wire Main Menu Play Button", priority = 5)]
-        public static void WireMainMenu()
-        {
-            var path = EditorBuildSettings.scenes.Select(s => s.path).FirstOrDefault(p => p.EndsWith(DH.SceneMainMenu + ".unity"));
-            if (path == null) { Debug.LogWarning("[DataHeist] MainMenuScreenScene not found in Build Settings."); return; }
-            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-            var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
-            int changed = 0;
-            foreach (var b in Object.FindObjectsByType<Button>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            {
-                var so = new SerializedObject(b);
-                var calls = so.FindProperty("m_OnClick.m_PersistentCalls.m_Calls");
-                for (int i = 0; i < calls.arraySize; i++)
-                {
-                    var arg = calls.GetArrayElementAtIndex(i).FindPropertyRelative("m_Arguments.m_StringArgument");
-                    if (arg != null && arg.stringValue == "GameScreenScene")
-                    {
-                        arg.stringValue = DH.SceneCharacterSelect;
-                        changed++;
-                    }
-                }
-                so.ApplyModifiedPropertiesWithoutUndo();
-            }
-            if (changed > 0) { EditorSceneManager.MarkSceneDirty(scene); EditorSceneManager.SaveScene(scene); }
-            Debug.Log($"[DataHeist] Main menu wired ({changed} button(s) now load {DH.SceneCharacterSelect}).");
         }
 
         [MenuItem("Data Heist/Play Level 1", priority = 10)]

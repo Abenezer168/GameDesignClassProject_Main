@@ -10,7 +10,7 @@ Everything for Level 1 "Neon Rooftops", the four playable runners and the full g
    - creates the editable character assets
    - checks Build Settings
    - wires the Main Menu Play button
-3. Open `Assets/Scenes/MainMenuScreenScene` and press Play. The flow is **Play → Choose Your Runner → Level 1**.
+3. Open `Assets/DataHeist/Scenes/MainMenu` and press Play. The flow is **Press any key → (story on first launch) → home page → Play → Choose Your Runner → Level 1**.
    - Shortcut: **Data Heist > Play Level 1**.
    - Debug commands: **Data Heist > Debug > Unlock All Runners + 1000 Bytes** and **Reset Save Data**.
 4. After editing the level, run **Data Heist > Validate Level 1 (Playtest Bot)**. It proves every runner can still finish with zero hits.
@@ -18,8 +18,10 @@ Everything for Level 1 "Neon Rooftops", the four playable runners and the full g
 
 ## Title screen and settings
 
-`MainMenuController` builds the title screen at runtime: a living rooftop backdrop (`MenuBackdrop`, shared with Character Select), a glitching logo and PLAY / STORY / RUNNERS / SETTINGS / QUIT. It installs itself whenever `MainMenuScreenScene` loads and switches the team's original `Canvas` off, so the scene file is never edited. To bring the old menu back, delete the `MainMenuInstaller` class at the bottom of `MainMenuController.cs`.
+The home page is `Assets/DataHeist/Scenes/MainMenu`. It replaces the team's old `MainMenuScreenScene`, which was deleted. Like every Data Heist scene it holds one GameObject (`MainMenuController`), and everything else is built at runtime.
 
+- **It shows the game being played.** `DemoPlayer` replays a recorded clean run of Level 1 through the real simulation and level views, so the background is the game itself. It plays as your equipped runner and loops. A **HOW TO RUN** card lights up JUMP, SLIDE and SLASH as the demo runner does each one. A "REC LIVE // NEON ROOFTOPS // 312 M" feed tag and the Halcyon tower on the skyline (`HalcyonSkyline`) complete the scene.
+- The demo routes live in `Resources/DataHeist/Demo/level01_<runner>.txt`, one action digit per 75 ms decision. They are made by **Data Heist > Record Title Screen Demo**, which runs the playtest bot in a "natural" mode: it only presses buttons when needed, and it takes drones down so every verb appears. The recorder replays each route and refuses any route that doesn't finish clean. **Re-record after changing Level 1 or the physics**; otherwise the demo can desync. If a route is missing, the home page falls back to the plain rooftop backdrop (`MenuBackdrop`).
 - The game opens on **PRESS ANY KEY** and stays silent until the player presses something. On first launch (`SaveData.storySeen`) that press plays the story, which then returns to the home page.
 - Home page: **PLAY** (Character Select), **STORY** (replay the intro), **SHOP** (`ShopPanel`: recruit runners with Data Bytes and equip them), **OPTIONS**, **QUIT**. The team's old Options, Shop, GameScreen and GameOver scenes reroute to these.
 - Audio: `AudioManager.Music` crossfades, so only one track is ever heard. Level music starts on GO, after the countdown. Story sounds fire when a shot fades in, and the story waits for the player rather than auto-advancing.
