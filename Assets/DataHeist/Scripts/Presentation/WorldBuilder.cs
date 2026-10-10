@@ -21,7 +21,16 @@ namespace DataHeist
             decor.SetParent(root, false);
             foreach (var d in L.decor)
             {
-                var sr = SR.Make(d.k, decor, SpriteLibrary.Get("Decor/" + d.k), DH.SortDecor, new Vector3(d.x, d.y - 1f / DH.PPU, 0));
+                // animated decor (screens, beacons, server LEDs) ships as numbered frames
+                var frames = SpriteLibrary.Anim("Decor/" + d.k);
+                var sr = SR.Make(d.k, decor, frames.Length > 0 ? frames[0] : SpriteLibrary.Get("Decor/" + d.k), DH.SortDecor, new Vector3(d.x, d.y - 1f / DH.PPU, 0));
+                if (frames.Length > 1)
+                {
+                    var anim = sr.gameObject.AddComponent<SpriteAnimator>();
+                    anim.timeOffset = d.x * 0.37f;
+                    anim.unscaled = false;
+                    anim.Play(frames, d.k == "beacon" ? 8f : d.k == "screen" ? 3f : 1.5f);
+                }
                 if (d.k.StartsWith("sign")) sr.sortingOrder = DH.SortDecor + 1;
             }
 

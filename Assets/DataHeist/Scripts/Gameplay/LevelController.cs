@@ -52,7 +52,7 @@ namespace DataHeist
 
             Sim = new RunnerSim(_level, _ch);
             _cam = CameraRig.Create();
-            Parallax.Create(_cam.transform, Sim.p.y);
+            Parallax.Create(_cam.transform, Sim.p.y, _level.theme);
             WorldBuilder.Build(_level, Sim);
 
             _entities = new GameObject("Entities").AddComponent<EntityViews>();
@@ -252,6 +252,19 @@ namespace DataHeist
                         break;
                     case SimEventType.Win:
                         StartCoroutine(Win());
+                        break;
+                    // ---- Level 3 hazards
+                    case SimEventType.TurretAim: a.Sfx("turret_aim", 0.55f); break;
+                    case SimEventType.TurretShot:
+                        a.Sfx("turret_shot", 0.7f);
+                        _fx.Burst(new Vector2(ev.x - 0.6f, ev.y), 6, new[] { DH.Red, DH.Amber }, 3, 0.2f, 0);
+                        break;
+                    case SimEventType.LaserOn: a.Sfx("laser_on", 0.35f); break;
+                    case SimEventType.PressWarn: a.Sfx("press_warn", 0.5f); break;
+                    case SimEventType.PressSlam:
+                        a.Sfx("press_slam", 0.8f);
+                        _cam.Shake(0.2f);
+                        _fx.Burst(at, 12, new[] { DH.Amber, DH.Hex("8a7fb0") }, 5, 0.35f, -16);
                         break;
                     // ---- Level 2 hazards
                     case SimEventType.SniperAim: a.Sfx("sniper_aim", 0.7f); break;

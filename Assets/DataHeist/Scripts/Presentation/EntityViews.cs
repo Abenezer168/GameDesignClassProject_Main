@@ -29,6 +29,8 @@ namespace DataHeist
         Sprite[] _padFrames;
         Sprite[] _sniperFrames, _sniperBolt, _shockOn;
         Sprite _shockOff, _signHang, _signFallen;
+        Sprite[] _turretFrames;
+        Sprite _pressHead, _pressShaft, _machineHang, _machineFallen;
 
         public void Init(RunnerSim sim)
         {
@@ -40,6 +42,14 @@ namespace DataHeist
             _emOn = SpriteLibrary.Get("Obstacles/laser_emitter_on");
             _emOff = SpriteLibrary.Get("Obstacles/laser_emitter_off");
             _padFrames = SpriteLibrary.Anim("Obstacles/jumppad");
+            if (System.Array.Exists(sim.ents, e => e.t == "turret" || e.t == "press" || e.kind == "machine"))
+            {
+                _turretFrames = SpriteLibrary.Anim("Enemies/turret");
+                _pressHead = SpriteLibrary.Get("Obstacles/crusher_head");
+                _pressShaft = SpriteLibrary.Get("Obstacles/crusher_shaft");
+                _machineHang = SpriteLibrary.Get("Obstacles/machine_hang");
+                _machineFallen = SpriteLibrary.Get("Obstacles/machine_fallen");
+            }
             if (System.Array.Exists(sim.ents, e => e.t == "sniper" || e.t == "shock" || e.t == "sign"))
             {
                 _sniperFrames = SpriteLibrary.Anim("Enemies/sniper_window");
@@ -115,6 +125,24 @@ namespace DataHeist
                     v.extra.color = new Color(DH.Cyan.r, DH.Cyan.g, DH.Cyan.b, 0.35f);
                     v.extra.transform.localScale = new Vector3(e.w * 0.9f, 0.6f, 1);
                     break;
+                case "turret":
+                    v.sr.sortingOrder = DH.SortEnemies;
+                    v.extra = SR.Box("WarnLine", v.go.transform, DH.Red, DH.SortBolts - 1, -14f, 0, 13.4f, px);
+                    v.extra.enabled = false;
+                    break;
+                case "press":
+                    v.sr.sprite = _pressHead;
+                    v.sr.sortingOrder = DH.SortProps + 3;
+                    v.beam = SR.Tiled("Shaft", v.go.transform, _pressShaft, DH.SortProps + 2, Vector3.zero, new Vector2(0.5f, 6f));
+                    v.extra = SR.Box("Danger", v.go.transform, new Color(1, 0.18f, 0.33f, 0.35f), DH.SortProps - 2, -0.75f, 0, 1.5f, 2 * px);
+                    break;
+                case "sign" when e.kind == "machine":
+                    v.sr.sprite = _machineHang;
+                    v.sr.sortingOrder = DH.SortProps + 2;
+                    v.extra = SR.Box("Chain", v.go.transform, DH.Hex("6a5f8e"), DH.SortProps + 1, -px, 1.2f, 2 * px, 8f);
+                    v.beam = SR.Box("Danger", v.go.transform, new Color(1, 0.18f, 0.33f, 0.45f), DH.SortProps - 2, -0.8f, 0, 1.6f, 2 * px);
+                    v.beam.enabled = false;
+                    break;
                 case "sign":
                     v.sr.sprite = _signHang;
                     v.sr.sortingOrder = DH.SortProps + 2;
@@ -128,6 +156,7 @@ namespace DataHeist
         void LateUpdate()
         {
             if (_sim == null) return;
+            float px = 1f / DH.PPU;
             float t = Time.time;
             var p = _sim.p;
             float camX = Camera.main != null ? Camera.main.transform.position.x : p.x;
@@ -196,12 +225,59 @@ namespace DataHeist
                     case "shock":
                     {
                         bool live = RunnerSim.ShockLive(e) && _sim.empT <= 0;
+                        bool warning = RunnerSim.ShockWarning(e) && _sim.empT <= 0;
                         v.sr.sprite = live && _shockOn.Length > 0 ? _shockOn[Mathf.FloorToInt(t * 18f) % _shockOn.Length] : _shockOff;
+                        v.sr.color = warning && Mathf.FloorToInt(t * 16f) % 2 == 0 ? DH.Amber : Color.white;
                         v.sr.size = new Vector2(e.w, 0.25f);
                         v.extra.enabled = live;
                         // tiled sprites pivot at the bottom-centre; e.x is the strip's left edge
                         v.go.transform.position = new Vector3(SR.Snap(e.x + e.w / 2f), SR.Snap(e.y - 2f / DH.PPU), 0);
                         v.extra.transform.localPosition = new Vector3(0, 0.1f, 0);
+                        break;
+                    }
+                    case "turret":
+                    {
+                        v.sr.sprite = _turretFrames.Length > 2
+                            ? _turretFrames[e.st == 1 ? 1 : e.st == 2 && e.cd > RunnerSim.TurretCooldown - 0.1f ? 2 : 0] : null;
+                        v.go.transform.position = new Vector3(SR.Snap(e.x), SR.Snap(e.y + 0.5f), 0);
+                        bool aiming = e.st == 1;
+                        float k = aiming ? 1f - e.cd / RunnerSim.TurretTelegraph : 0;
+                        v.extra.enabled = aiming && (k < 0.7f || Mathf.FloorToInt(t * 30f) % 2 == 0);
+                        if (aiming)
+                        {
+                            v.extra.transform.localPosition = new Vector3(v.extra.transform.localPosition.x, e.aimY - (e.y + 0.5f), 0);
+                            var c = DH.Red; c.a = 0.3f + 0.6f * k;
+                            v.extra.color = c;
+                        }
+                        break;
+                    }
+                    case "press":
+                    {
+                        float bottom = RunnerSim.PressBottom(e);
+                        bool warn = RunnerSim.PressWarning(e);
+                        float shake = warn ? Mathf.Sin(t * 80f) * 1.5f / DH.PPU : 0;
+                        // the plate (pivot bottom-centre) rides at its current height; the shaft goes up from it,
+                        // and the danger marker stays on the floor underneath
+                        v.go.transform.position = new Vector3(SR.Snap(e.x + shake), SR.Snap(e.y + bottom), 0);
+                        v.beam.transform.localPosition = new Vector3(0, 0.85f, 0);
+                        v.extra.transform.localPosition = new Vector3(0, -bottom + px, 0);
+                        v.extra.color = new Color(1, 0.18f, 0.33f, warn ? 0.9f : bottom < 1.5f ? 0.6f : 0.25f);
+                        break;
+                    }
+                    case "sign" when e.kind == "machine":
+                    {
+                        bool landed = e.st == RunnerSim.SignLanded;
+                        v.sr.sprite = landed ? _machineFallen : _machineHang;
+                        v.extra.enabled = e.st <= RunnerSim.SignShaking;
+                        // red marker on the floor under the load while it threatens to drop
+                        v.beam.enabled = e.st <= RunnerSim.SignFalling && e.x - p.x < RunnerSim.SignTrigger + 5f;
+                        if (v.beam.enabled)
+                        {
+                            float gy = _sim.GroundAt(e.x) - v.go.transform.position.y;
+                            v.beam.transform.localPosition = new Vector3(0, gy + px, 0);
+                            var c = DH.Red; c.a = 0.35f + 0.35f * Mathf.Abs(Mathf.Sin(t * (e.st >= 1 ? 18f : 5f)));
+                            v.beam.color = c;
+                        }
                         break;
                     }
                     case "sign":
@@ -213,9 +289,11 @@ namespace DataHeist
                     }
                     case "laser":
                     {
-                        bool off = _sim.empT > 0;
-                        bool flick = off && Mathf.FloorToInt(t * 12f) % 7 == 0;
+                        bool off = !_sim.LaserLive(e);
+                        bool warning = RunnerSim.LaserWarning(e);
+                        bool flick = (_sim.empT > 0 && Mathf.FloorToInt(t * 12f) % 7 == 0) || (warning && Mathf.FloorToInt(t * 20f) % 3 == 0);
                         v.beam.enabled = !off || flick;
+                        v.beam.color = warning ? new Color(1, 1, 1, 0.45f) : Color.white;
                         if (_beamFrames.Length > 0) v.beam.sprite = _beamFrames[Mathf.FloorToInt(t * 15f) % _beamFrames.Length];
                         v.beam.size = new Vector2(0.5f, e.h);
                         v.emitter.sprite = off ? _emOff : _emOn;

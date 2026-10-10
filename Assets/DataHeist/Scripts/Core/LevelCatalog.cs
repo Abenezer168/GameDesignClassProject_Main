@@ -15,6 +15,7 @@ namespace DataHeist
         {
             new Entry { id = "level01", scene = DH.SceneLevel01, name = "NEON ROOFTOPS", number = 1 },
             new Entry { id = "level02", scene = DH.SceneLevel02, name = "CORPORATE DISTRICT", number = 2 },
+            new Entry { id = "level03", scene = DH.SceneLevel03, name = "UNDERGROUND VAULT", number = 3 },
         };
 
         public static int IndexOf(string id)

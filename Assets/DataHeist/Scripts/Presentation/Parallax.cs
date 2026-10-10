@@ -18,25 +18,43 @@ namespace DataHeist
         Vector2[] _dropSeed;
         float _anchorY;
 
-        public static Parallax Create(Transform cam, float groundY)
+        string _theme = "city";
+        SpriteRenderer _ceiling;
+        float _ceilingW;
+
+        /// <param name="theme">"city" (night skyline + rain) or "vault" (underground server hall + ceiling + dust).</param>
+        public static Parallax Create(Transform cam, float groundY, string theme = "city")
         {
             var go = new GameObject("Parallax");
             var p = go.AddComponent<Parallax>();
             p._cam = cam;
             p._anchorY = groundY;
+            p._theme = string.IsNullOrEmpty(theme) ? "city" : theme;
             p.Build();
             return p;
         }
 
+        bool Vault => _theme == "vault";
+
         void Build()
         {
-            _sky = SR.Make("Sky", transform, SpriteLibrary.Get("Parallax/sky"), DH.SortSky, Vector3.zero);
+            string pre = Vault ? "vault_" : "city_";
+            _sky = SR.Make("Sky", transform, SpriteLibrary.Get(Vault ? "Parallax/vault_sky" : "Parallax/sky"), DH.SortSky, Vector3.zero);
             _layers = new[]
             {
-                MakeLayer("city_far", 0.08f, DH.SortFar, -0.2f),
-                MakeLayer("city_mid", 0.18f, DH.SortMid, -1.6f),
-                MakeLayer("city_near", 0.32f, DH.SortNear, -3.2f),
+                MakeLayer(pre + "far", 0.08f, DH.SortFar, -0.2f),
+                MakeLayer(pre + "mid", 0.18f, DH.SortMid, -1.6f),
+                MakeLayer(pre + "near", 0.32f, DH.SortNear, -3.2f),
             };
+            if (Vault)
+            {
+                // ceiling band hung from the top of the view; dust and sparks instead of rain
+                var cs = SpriteLibrary.Get("Parallax/vault_ceiling");
+                _ceilingW = cs != null ? cs.bounds.size.x : 20f;
+                _ceiling = SR.Tiled("Ceiling", transform, cs, DH.SortNear + 2, Vector3.zero, new Vector2(_ceilingW * 3f, cs != null ? cs.bounds.size.y : 2f));
+                gameObject.AddComponent<VaultAmbience>().Init(_cam);
+                return;
+            }
             // rain
             _rain = new GameObject("Rain").transform;
             _rain.SetParent(transform, false);
@@ -71,6 +89,12 @@ namespace DataHeist
                 _sky.transform.position = new Vector3(c.x - halfW, c.y - halfH, 0);
                 _sky.transform.localScale = new Vector3(halfW * 2 / b.x, halfH * 2 / b.y, 1);
             }
+            if (_ceiling != null)
+            {
+                // pivot is bottom-left; hang the band from the top edge of the view
+                float cx = c.x - halfW - Mathf.Repeat(c.x * 0.5f, _ceilingW);
+                _ceiling.transform.position = new Vector3(SR.Snap(cx), SR.Snap(c.y + halfH - _ceiling.size.y), 0);
+            }
             foreach (var l in _layers)
             {
                 if (l.sr.sprite == null) continue;
@@ -80,6 +104,7 @@ namespace DataHeist
                 float y = c.y - halfH - 0.625f - (c.y - _anchorY - 2.4f) * l.factor * 0.6f;
                 l.sr.transform.position = new Vector3(SR.Snap(start), SR.Snap(y), 0);
             }
+            if (_drops == null) return;
             // rain in screen space
             float t = Time.unscaledTime;
             float w = halfW * 2, h = halfH * 2 + 0.6f;

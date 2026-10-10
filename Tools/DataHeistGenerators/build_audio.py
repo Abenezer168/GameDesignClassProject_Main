@@ -38,6 +38,10 @@ MUSIC = {   # OpenGameArt, CC0. (file name in game, url, seconds to skip, author
     'music_level01': ('https://opengameart.org/sites/default/files/cyber_runner.ogg', 0.0, 'ansimuz', 'Cyber Runner'),
     # the first ~29 s are a quiet intro; a level should start on the beat
     'music_level02': ('https://opengameart.org/sites/default/files/cybermarch.wav', 'auto', 'iamoneabe', 'Cyber March'),
+    # Level 3: tense infiltration, the Guardian fight, then the lockdown escape
+    'music_level03': ('https://opengameart.org/sites/default/files/darkcity.wav', 0.0, 'cinameng', 'Dark City'),
+    'music_boss': ('https://opengameart.org/sites/default/files/boss_fight_2.ogg', 0.0, 'ansimuz', 'Boss Fight 2'),
+    'music_escape': ('https://opengameart.org/sites/default/files/die_hardv1.ogg', 0.0, 'centurionofwar', 'Die Hard Battle'),
 }
 
 CREDITS = [
@@ -71,6 +75,12 @@ SFX = {
     'sign_creak':  [L('impact', 'impactMetal_light_002', 0.8, pitch=0.7), L('impact', 'impactPlank_medium_000', 0.5, 0.08)],
     'sign_crash':  [L('impact', 'impactMetal_heavy_002'), L('impact', 'impactGlass_heavy_000', 0.8, 0.02),
                     L('impact', 'impactPlate_heavy_000', 0.6, 0.05)],
+    # Level 3 hazards
+    'turret_aim':  [L('digital', 'phaserUp4', 0.7, pitch=0.7), L('ui', 'tick_004', 0.6, 0.05)],
+    'turret_shot': [L('scifi', 'laserSmall_001'), L('impact', 'impactMetal_light_001', 0.5)],
+    'laser_on':    [L('scifi', 'forceField_003', 0.8, slice=(0.0, 0.3))],
+    'press_warn':  [L('scifi', 'engineCircular_000', 0.7, 0.0, slice=(0.0, 0.35)), L('ui', 'error_008', 0.4)],
+    'press_slam':  [L('impact', 'impactPlate_heavy_002'), L('scifi', 'lowFrequency_explosion_001', 0.7), L('impact', 'impactMetal_heavy_001', 0.6)],
     # pickups and level objects
     'byte':        [L('digital', 'pepSound3', 0.9)],
     'repair':      [L('digital', 'powerUp11')],

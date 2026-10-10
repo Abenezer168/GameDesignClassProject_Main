@@ -17,7 +17,9 @@ namespace DataHeist
         Jump, AirJump, Land, Slide, Dive, Attack, Byte, Repair, Shard, Pad, DroneDown, CanHit,
         Hurt, Dead, Checkpoint, Dash, DashEnd, Emp, Glitch, AbilityDenied, Shoot, Deflect, Respawn, Win,
         // Level 2 hazards
-        SniperAim, SniperShot, ShockOn, SignShake, SignFall, SignLand, SignSmash
+        SniperAim, SniperShot, ShockOn, SignShake, SignFall, SignLand, SignSmash,
+        // Level 3
+        TurretAim, TurretShot, LaserOn, PressWarn, PressSlam
     }
 
     public struct SimEvent
@@ -296,7 +298,9 @@ namespace DataHeist
             foreach (var e in ents)
             {
                 if (!e.alive) continue;
-                bool ceiling = e.t == "barrier" || (e.t == "laser" && e.mode == "high" && empT <= 0);
+                bool ceiling = e.t == "barrier"
+                               || (e.t == "laser" && (e.mode == "high" || e.mode == "high_cycle") && LaserLive(e))
+                               || (e.t == "press" && PressBottom(e) < P.standHeight);
                 if (!ceiling) continue;
                 var b = BoxOf(e);
                 if (Overlap(p.x - hw, p.y, p.x + hw + 0.3f, p.y + P.standHeight, b)) return true;
@@ -358,6 +362,11 @@ namespace DataHeist
                 case "repair": return Rect.MinMaxRect(e.x - 0.35f, e.y - 0.35f, e.x + 0.35f, e.y + 0.35f);
                 case "shard": return Rect.MinMaxRect(e.x - 0.5f, e.y - 0.7f, e.x + 0.5f, e.y + 0.7f);
                 case "shock": return Rect.MinMaxRect(e.x, e.y, e.x + e.w, e.y + 0.15f);
+                case "press":
+                {
+                    float b = e.y + PressBottom(e);
+                    return Rect.MinMaxRect(e.x - 0.75f, b, e.x + 0.75f, b + 0.9f);
+                }
                 case "sign":
                     if (e.st == SignFalling) return Rect.MinMaxRect(e.x - 1f, e.y, e.x + 1f, e.y + 1.0f);
                     if (e.st == SignLanded) return Rect.MinMaxRect(e.x - 0.9f, e.y, e.x + 0.9f, e.y + 0.7f);
@@ -367,7 +376,7 @@ namespace DataHeist
         }
 
         static bool HasBox(SimEntity e) =>
-            e.t != "checkpoint" && e.t != "exit" && e.t != "sniper" && !(e.t == "sign" && e.st < SignFalling);
+            e.t != "checkpoint" && e.t != "exit" && e.t != "sniper" && e.t != "turret" && !(e.t == "sign" && e.st < SignFalling);
 
         // ------------------------------------------------------------------ Level 2 hazards
         // Every hazard is triggered by the runner's distance, never by the clock, so a run (and a
@@ -381,7 +390,111 @@ namespace DataHeist
         public const int SignHanging = 0, SignShaking = 1, SignFalling = 2, SignLanded = 3;
 
         /// <summary>A shock strip is live for the first ShockOnTime of every ShockPeriod after it triggers.</summary>
-        public static bool ShockLive(SimEntity e) => e.st == 1 && Mathf.Repeat(e.cd, ShockPeriod) < ShockOnTime;
+        public static bool ShockLive(SimEntity e)
+        {
+            if (e.st != 1) return false;
+            float ph = Mathf.Repeat(e.cd, ShockPeriod);
+            // "warn" strips (Level 3) spend 0.4 s crackling amber before every live phase
+            return e.mode == "warn" ? ph >= ShockWarnTime && ph < ShockWarnTime + ShockOnTime : ph < ShockOnTime;
+        }
+
+        public const float ShockWarnTime = 0.4f;
+
+        /// <summary>True while a warned strip is in its amber lead-in (drawn as a warning).</summary>
+        public static bool ShockWarning(SimEntity e) =>
+            e.st == 1 && e.mode == "warn" && Mathf.Repeat(e.cd, ShockPeriod) < ShockWarnTime;
+
+        // ------------------------------------------------------------------ Level 3 hazards
+        public const float TurretAimAt = 16f, TurretTelegraph = 0.7f, TurretCooldown = 1.2f, TurretBoltSpeed = 16f;
+        public const float LaserPeriod = 2f, LaserWarnAt = 0.6f, LaserOnAt = 1f;     // off, warn (flicker), on
+        public const float PressTrigger = 15f, PressUpY = 3.6f, PressDownY = 0.6f;
+        // press cycle: up hold, warn shake, slam, down hold, rise
+        public const float PressUp = 1.0f, PressWarn = 0.35f, PressSlam = 0.12f, PressDown = 0.6f, PressRise = 0.5f;
+        public const float PressPeriod = PressUp + PressWarn + PressSlam + PressDown + PressRise;
+
+        public static bool IsCycling(SimEntity e) => e.mode == "low_cycle" || e.mode == "high_cycle";
+
+        /// <summary>Laser beams: always live, except cycling ones (off / warning / on) and while EMP'd.</summary>
+        public bool LaserLive(SimEntity e)
+        {
+            if (empT > 0) return false;
+            if (!IsCycling(e)) return true;
+            return e.st == 1 && Mathf.Repeat(e.cd, LaserPeriod) >= LaserOnAt;
+        }
+
+        public static bool LaserWarning(SimEntity e)
+        {
+            if (!IsCycling(e) || e.st != 1) return false;
+            float ph = Mathf.Repeat(e.cd, LaserPeriod);
+            return ph >= LaserWarnAt && ph < LaserOnAt;
+        }
+
+        /// <summary>Height of a press plate's bottom edge above its floor.</summary>
+        public static float PressBottom(SimEntity e)
+        {
+            if (e.st != 1) return PressUpY;
+            float t = Mathf.Repeat(e.cd, PressPeriod);
+            if (t < PressUp + PressWarn) return PressUpY;
+            t -= PressUp + PressWarn;
+            if (t < PressSlam) return Mathf.Lerp(PressUpY, PressDownY, t / PressSlam);
+            t -= PressSlam;
+            if (t < PressDown) return PressDownY;
+            t -= PressDown;
+            return Mathf.Lerp(PressDownY, PressUpY, t / PressRise);
+        }
+
+        public static bool PressWarning(SimEntity e)
+        {
+            if (e.st != 1) return false;
+            float t = Mathf.Repeat(e.cd, PressPeriod);
+            return t >= PressUp && t < PressUp + PressWarn;
+        }
+
+        void UpdateLevel3(SimEntity e, float dt)
+        {
+            float dx = e.x - p.x;
+            switch (e.t)
+            {
+                case "turret":
+                    // st 0 waiting, 1 aiming (warning line), 2 cooling down; "low" mode aims at the ankles
+                    if (e.st == 0 && dx < TurretAimAt && dx > 4f)
+                    {
+                        e.st = 1; e.cd = TurretTelegraph;
+                        e.aimY = e.y + (e.mode == "low" ? 0.25f : 0.8f);
+                        Emit(SimEventType.TurretAim, e.x, e.aimY);
+                    }
+                    else if (e.st == 1 && (e.cd -= dt) <= 0)
+                    {
+                        bolts.Add(new SimBolt { x = e.x - 0.6f, y = e.aimY, vx = -TurretBoltSpeed });
+                        Emit(SimEventType.TurretShot, e.x, e.aimY);
+                        e.st = 2; e.cd = TurretCooldown;
+                    }
+                    else if (e.st == 2 && (e.cd -= dt) <= 0) e.st = 0;
+                    break;
+                case "laser":
+                    if (e.st == 0 && dx < 14f) { e.st = 1; e.cd = 0; }
+                    else if (e.st == 1)
+                    {
+                        bool was = LaserLive(e);
+                        e.cd += dt;
+                        if (!was && LaserLive(e) && dx < 12f && dx > -1f) Emit(SimEventType.LaserOn, e.x, e.y);
+                    }
+                    break;
+                case "press":
+                    if (e.st == 0 && dx < PressTrigger) { e.st = 1; e.cd = 0; }
+                    else if (e.st == 1)
+                    {
+                        bool warn = PressWarning(e), down = PressBottom(e) <= PressDownY + 0.01f;
+                        e.cd += dt;
+                        if (dx < 13f && dx > -2f)
+                        {
+                            if (!warn && PressWarning(e)) Emit(SimEventType.PressWarn, e.x, e.y + PressUpY);
+                            if (!down && PressBottom(e) <= PressDownY + 0.01f) Emit(SimEventType.PressSlam, e.x, e.y + PressDownY);
+                        }
+                    }
+                    break;
+            }
+        }
 
         void UpdateLevel2(SimEntity e, float dt)
         {
@@ -455,6 +568,12 @@ namespace DataHeist
                 if (!e.alive) continue;
                 if ((e.t == "drone" || e.t == "gunner") && e.move == "bob")
                     e.y = e.baseY + Mathf.Sin(time * 3f + e.phase) * 0.18f;
+                if ((e.t == "drone" || e.t == "gunner") && e.move == "patrol")
+                {
+                    // sweeps 1.5 units each way as the runner approaches (driven by distance, not time)
+                    e.x = e.ox + Mathf.Sin((p.x - e.ox) * 0.45f + e.phase) * 1.5f;
+                    e.y = e.baseY + Mathf.Sin(time * 3f + e.phase) * 0.12f;
+                }
                 if (e.t == "gunner")
                 {
                     float dx = e.x - p.x;
@@ -471,6 +590,7 @@ namespace DataHeist
                     }
                 }
                 if (e.t == "sniper" || e.t == "shock" || e.t == "sign") UpdateLevel2(e, dt);
+                if (e.t == "turret" || e.t == "press" || (e.t == "laser" && IsCycling(e))) UpdateLevel3(e, dt);
                 if (e.t == "byte" && magnetT > 0)
                 {
                     float dx = p.x - e.x, dy = (p.y + 0.6f) - e.y, d = Mathf.Sqrt(dx * dx + dy * dy);
@@ -555,7 +675,10 @@ namespace DataHeist
                         }
                         break;
                     case "laser":
-                        if (touching && !dashing && empT <= 0) Hurt();
+                        if (touching && !dashing && LaserLive(e)) Hurt();
+                        break;
+                    case "press":
+                        if (touching && !dashing) Hurt();
                         break;
                     case "shock":
                         // only feet on a live strip: jump it, wait for it to drop, or EMP it

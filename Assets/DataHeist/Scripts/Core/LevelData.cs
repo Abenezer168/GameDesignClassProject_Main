@@ -18,6 +18,7 @@ namespace DataHeist
         public float spawnX;
         public float exitX;
         public float parTime = 80f;
+        public string theme = "city";   // "city" or "vault" (backgrounds, ambience)
         public RoofData[] roofs;
         public RoofData[] platforms;
         public EntityData[] entities;
@@ -72,7 +73,7 @@ namespace DataHeist
     public class EntityData
     {
         public string t;      // byte, can, barrier, drone, gunner, laser, pad, repair, checkpoint, shard, exit,
-                              // sniper, shock, sign (Level 2)
+                              // sniper, shock, sign (Level 2); turret, press (Level 3)
         public float x, y;
         public string kind;   // drone kind
         public string move;   // bob | still

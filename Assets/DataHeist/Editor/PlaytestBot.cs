@@ -105,10 +105,15 @@ namespace DataHeist.EditorTools
                     foreach (var ev in sim.events) counts[ev.type] = counts.TryGetValue(ev.type, out var c) ? c + 1 : 1;
                     sim.events.Clear();
                 }
-            int Get(SimEventType t) => counts.TryGetValue(t, out var c) ? c : 0;
-            if (Get(SimEventType.SniperShot) + Get(SimEventType.SignFall) + Get(SimEventType.ShockOn) == 0) return "";
-            return $" | survived {Get(SimEventType.SniperShot)} sniper shots ({Get(SimEventType.Deflect)} slashed), " +
-                   $"{Get(SimEventType.SignFall)} falling signs ({Get(SimEventType.SignSmash)} smashed), {Get(SimEventType.ShockOn)} live-floor pulses";
+            var parts = new List<string>();
+            foreach (var (type, label) in new[]
+            {
+                (SimEventType.SniperShot, "sniper shots"), (SimEventType.TurretShot, "turret shots"), (SimEventType.Shoot, "drone bolts"),
+                (SimEventType.Deflect, "slashed back"), (SimEventType.SignFall, "falling loads"), (SimEventType.SignSmash, "smashed"),
+                (SimEventType.ShockOn, "live-floor pulses"), (SimEventType.LaserOn, "laser switch-ons"), (SimEventType.PressSlam, "press slams"),
+            })
+                if (counts.TryGetValue(type, out var n) && n > 0) parts.Add($"{n} {label}");
+            return parts.Count == 0 ? "" : " | survived " + string.Join(", ", parts);
         }
 
         static string Route(Path p)
@@ -153,6 +158,9 @@ namespace DataHeist.EditorTools
 
         [MenuItem("Data Heist/Validate Level 2 (Playtest Bot)", priority = 21)]
         public static void ValidateLevel2() => Validate("level02");
+
+        [MenuItem("Data Heist/Validate Level 3 (Playtest Bot)", priority = 21)]
+        public static void ValidateLevel3() => Validate("level03");
 
         /// <summary>Headless entry point: validates every level and exits 0 (all clear) or 1.</summary>
         public static void ValidateAllBatch()

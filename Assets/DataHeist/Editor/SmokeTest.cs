@@ -343,6 +343,27 @@ namespace DataHeist.EditorTools
                     foreach (var w in Shot("12_level02_sniper")) yield return w;
                 }
             }
+
+            // --- Level 3: environment and hazards
+            SceneManager.LoadScene(DH.SceneLevel03);
+            yield return 5f;
+            var l3 = Object.FindAnyObjectByType<LevelController>();
+            Check(l3 != null && l3.levelId == "level03" && l3.Sim != null && l3.Sim.p.x > 3f, "Level 3 loads and runs");
+            Check(Object.FindAnyObjectByType<VaultAmbience>() != null, "Level 3 uses the underground vault theme");
+            foreach (var w in Shot("13_level03_vault")) yield return w;
+            if (l3 != null && l3.Sim != null)
+            {
+                var s3 = l3.Sim;
+                foreach (var (x, wait, name) in new[] { (103f, 0.35f, "14_level03_turret"), (210f, 1.4f, "15_level03_laser"),
+                                                        (316f, 1.6f, "16_level03_press"), (350f, 0.5f, "17_level03_machine") })
+                {
+                    Place(s3, x);
+                    yield return wait;
+                    foreach (var w in Shot(name)) yield return w;
+                }
+                Check(System.Array.Exists(s3.ents, e => e.t == "press" && e.st == 1), "crushers run their cycle");
+                Check(System.Array.Exists(s3.ents, e => e.t == "turret" && e.st > 0), "turrets wake up and aim");
+            }
         }
 
         /// <summary>Test helper: drop the runner on the roof at x, briefly invulnerable.</summary>
