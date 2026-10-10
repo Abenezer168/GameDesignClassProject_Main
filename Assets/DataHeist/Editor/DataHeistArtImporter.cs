@@ -21,7 +21,10 @@ namespace DataHeist.EditorTools
             ti.textureType = TextureImporterType.Sprite;
             ti.spriteImportMode = SpriteImportMode.Single;
             ti.spritePixelsPerUnit = DH.PPU;
-            ti.filterMode = FilterMode.Point;
+            // the HD key art is a painted 1920x1080 image, not pixel art: smooth filtering, full size
+            bool hd = rel.StartsWith("Story/keyart");
+            ti.filterMode = hd ? FilterMode.Bilinear : FilterMode.Point;
+            if (hd) ti.maxTextureSize = 2048;
             ti.textureCompression = TextureImporterCompression.Uncompressed;
             ti.mipmapEnabled = false;
             ti.alphaIsTransparency = true;
