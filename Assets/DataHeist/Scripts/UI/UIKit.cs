@@ -186,5 +186,111 @@ namespace DataHeist
             EventSystem.current.SetSelectedGameObject(null);
             EventSystem.current.SetSelectedGameObject(s.gameObject);
         }
+
+        /// <summary>Labelled 0..1 slider row (label on the left, bar on the right, percent readout).</summary>
+        public static Slider Slider(Transform parent, string label, float value, Action<float> onChange, float labelWidth = 80)
+        {
+            var row = Rect(label, parent);
+            Size(row, 16);
+            var t = Text("Label", row, label, 7, DH.Ink);
+            t.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(labelWidth, 12));
+            var pct = Text("Value", row, "", 6, DH.Cyan, TextAlignmentOptions.Right);
+            pct.rectTransform.Place(new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(34, 10));
+            var sr = Rect("Slider", row);
+            sr.anchorMin = new Vector2(0, 0.5f); sr.anchorMax = new Vector2(1, 0.5f);
+            sr.offsetMin = new Vector2(labelWidth + 10, -4); sr.offsetMax = new Vector2(-40, 4);
+            var bg = Image("Bg", sr, DH.PurpleLine); bg.rectTransform.Stretch();
+            var fillArea = Rect("FillArea", sr).Stretch();
+            var fill = Image("Fill", fillArea, DH.Pink); fill.rectTransform.Stretch();
+            var handleArea = Rect("HandleArea", sr).Stretch();
+            var handle = Image("Handle", handleArea, Color.white);
+            handle.rectTransform.sizeDelta = new Vector2(6, 12);
+            var s = sr.gameObject.AddComponent<Slider>();
+            s.fillRect = fill.rectTransform;
+            s.handleRect = handle.rectTransform;
+            s.targetGraphic = handle;
+            var cb = s.colors;
+            cb.highlightedColor = DH.Cyan; cb.selectedColor = DH.Cyan;
+            s.colors = cb;
+            s.minValue = 0; s.maxValue = 1;
+            s.value = value;
+            pct.text = Mathf.RoundToInt(value * 100) + "%";
+            s.onValueChanged.AddListener(v =>
+            {
+                pct.text = Mathf.RoundToInt(v * 100) + "%";
+                onChange(v);
+            });
+            sr.gameObject.AddComponent<UIHoverSound>();
+            return s;
+        }
+
+        /// <summary>
+        /// "LABEL   &lt; VALUE &gt;" option row. Left/right on keyboard or gamepad (or clicking the
+        /// arrows) steps through the options; returns the selectable for navigation.
+        /// </summary>
+        public static Slider Stepper(Transform parent, string label, string[] options, int index, Action<int> onChange, float labelWidth = 80)
+        {
+            var row = Rect(label, parent);
+            Size(row, 16);
+            var hl = Image("Highlight", row, new Color(1, 1, 1, 0));
+            hl.rectTransform.Stretch();
+            var t = Text("Label", row, label, 7, DH.Ink);
+            t.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(labelWidth, 12));
+            var value = Text("Value", row, "", 7, DH.Cyan, TextAlignmentOptions.Center);
+            value.rectTransform.anchorMin = new Vector2(0, 0.5f); value.rectTransform.anchorMax = new Vector2(1, 0.5f);
+            value.rectTransform.offsetMin = new Vector2(labelWidth + 30, -6); value.rectTransform.offsetMax = new Vector2(-26, 6);
+
+            // a whole-number slider gives free left/right handling and up/down navigation
+            var s = row.gameObject.AddComponent<Slider>();
+            s.transition = Selectable.Transition.ColorTint;
+            s.targetGraphic = hl;
+            var cb = s.colors;
+            cb.normalColor = new Color(1, 1, 1, 0);
+            cb.highlightedColor = cb.selectedColor = new Color(DH.Cyan.r, DH.Cyan.g, DH.Cyan.b, 0.12f);
+            cb.colorMultiplier = 1;
+            s.colors = cb;
+            s.wholeNumbers = true;
+            s.minValue = 0; s.maxValue = Mathf.Max(0, options.Length - 1);
+            s.SetValueWithoutNotify(Mathf.Clamp(index, 0, options.Length - 1));
+            value.text = options.Length > 0 ? options[(int)s.value] : "-";
+            s.onValueChanged.AddListener(v =>
+            {
+                int i = Mathf.RoundToInt(v);
+                value.text = options[i];
+                AudioManager.I.Sfx("ui_move", 0.6f);
+                onChange(i);
+            });
+
+            void Arrow(string name, string glyph, Vector2 anchor, float x, int dir)
+            {
+                var b = Button(name, row, glyph, () => s.value = Mathf.Clamp(s.value + dir, s.minValue, s.maxValue), false);
+                b.GetComponent<RectTransform>().Place(anchor, anchor, new Vector2(x, 0), new Vector2(16, 14));
+                var nav = b.navigation; nav.mode = Navigation.Mode.None; b.navigation = nav;
+            }
+            Arrow("Prev", "<", new Vector2(0, 0.5f), labelWidth + 12, -1);
+            Arrow("Next", ">", new Vector2(1, 0.5f), -8, 1);
+            row.gameObject.AddComponent<UIHoverSound>();
+            return s;
+        }
+
+        static Sprite _fadeLeft;
+
+        /// <summary>Horizontal fade (opaque on the left, clear on the right) for text-over-art readability.</summary>
+        public static Sprite FadeLeftSprite
+        {
+            get
+            {
+                if (_fadeLeft != null) return _fadeLeft;
+                var tex = new Texture2D(64, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                for (int x = 0; x < 64; x++)
+                {
+                    float a = 1f - Mathf.SmoothStep(0, 1, x / 63f);
+                    tex.SetPixel(x, 0, new Color(1, 1, 1, a));
+                }
+                tex.Apply();
+                _fadeLeft = Sprite.Create(tex, new UnityEngine.Rect(0, 0, 64, 1), new Vector2(0.5f, 0.5f), 100);
+                return _fadeLeft;
+            }
+        }
     }
 }

@@ -14,6 +14,15 @@ Everything for Level 1 "Neon Rooftops", the four playable runners and the full g
    - Shortcut: **Data Heist > Play Level 1**.
    - Debug commands: **Data Heist > Debug > Unlock All Runners + 1000 Bytes** and **Reset Save Data**.
 4. After editing the level, run **Data Heist > Validate Level 1 (Playtest Bot)**. It proves every runner can still finish with zero hits.
+5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It plays through the title screen, Settings, Character Select and Level 1 and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
+
+## Title screen and settings
+
+`MainMenuController` builds the title screen at runtime: a living rooftop backdrop (`MenuBackdrop`, shared with Character Select), a glitching logo and PLAY / STORY / RUNNERS / SETTINGS / QUIT. It installs itself whenever `MainMenuScreenScene` loads and switches the team's original `Canvas` off, so the scene file is never edited. To bring the old menu back, delete the `MainMenuInstaller` class at the bottom of `MainMenuController.cs`.
+
+- **PLAY** opens the story the first time (`SaveData.storySeen`), then Character Select.
+- **SETTINGS** (`SettingsPanel`) has three tabs. AUDIO has master, music and SFX volume. VIDEO has resolution, windowed/fullscreen and vsync. CONTROLS rebinds Jump, Slide, Attack, Ability and Pause. Every change is applied and saved immediately: volumes and display settings go to `SaveData` and are applied by `GameSettings`, and key bindings use the same PlayerPrefs overrides that the levels load.
+- Screen changes fade through black via `SceneFader.Load(scene)`.
 
 ## Controls (GDD, all remappable in Pause → Controls)
 

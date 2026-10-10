@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace DataHeist
@@ -33,10 +32,7 @@ namespace DataHeist
         Image _abIcon;
         readonly List<(Image fill, TextMeshProUGUI value)> _stats = new List<(Image, TextMeshProUGUI)>();
         Button _go, _back;
-        SpriteRenderer _runner;
-        CameraRig _cam;
-        Transform _camT;
-        float _camX;
+        MenuBackdrop _backdrop;
 
         void Start()
         {
@@ -58,33 +54,15 @@ namespace DataHeist
         // ---------------------------------------------------------------- world backdrop
         void BuildBackdrop()
         {
-            var camGo = Camera.main != null ? Camera.main.gameObject : new GameObject("Main Camera");
-            camGo.tag = "MainCamera";
-            if (!camGo.TryGetComponent<Camera>(out var cam)) cam = camGo.AddComponent<Camera>();
-            cam.orthographic = true; cam.orthographicSize = DH.OrthoSize;
-            cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = DH.Night;
-            if (camGo.GetComponent<AudioListener>() == null) camGo.AddComponent<AudioListener>();
-            _camT = camGo.transform;
-            Parallax.Create(_camT, 0);
-            // endless rooftop strip at the bottom of the screen
-            var strip = new GameObject("Rooftop").transform;
-            SR.Tiled("Ledge", strip, SpriteLibrary.Get("Tiles/rooftop_violet"), DH.SortRoofTop, new Vector3(-20, 0.06f, 0), new Vector2(4000, 0.5f));
-            SR.Tiled("Facade", strip, SpriteLibrary.Get("Tiles/facade_violet_0"), DH.SortFacade, new Vector3(-20, -0.44f, 0), new Vector2(4000, 8));
-            _runner = SR.Make("Runner", null, null, DH.SortPlayer, Vector3.zero);
-            _camX = 0;
+            _backdrop = MenuBackdrop.Create();
+            _backdrop.runnerScreenX = 0.18f;
         }
 
         void Update()
         {
-            // camera cruises along the rooftops; runner keeps pace
-            _camX += Time.unscaledDeltaTime * 7.5f;
-            float halfH = DH.OrthoSize, halfW = halfH * Camera.main.aspect;
-            _camT.position = new Vector3(SR.Snap(_camX), SR.Snap(halfH - 1.7f), -10);
             var c = CharacterDefinition.All[_index];
-            var run = SpriteLibrary.CharacterAnim(c.id, "run");
-            if (run.Length > 0) _runner.sprite = run[Mathf.FloorToInt(Time.unscaledTime * 14) % run.Length];
-            _runner.transform.position = new Vector3(SR.Snap(_camX - halfW + 2.2f), 1f / DH.PPU, 0);
-            _runner.color = SaveSystem.IsUnlocked(c) ? Color.white : new Color(0, 0, 0, 0.85f);
+            _backdrop.runnerId = c.id;
+            _backdrop.runnerTint = SaveSystem.IsUnlocked(c) ? Color.white : new Color(0, 0, 0, 0.85f);
 
             var kb = Keyboard.current;
             if (kb == null) return;
@@ -266,10 +244,6 @@ namespace DataHeist
             Load(backScene);
         }
 
-        static void Load(string scene)
-        {
-            if (Application.CanStreamedLevelBeLoaded(scene)) SceneManager.LoadScene(scene);
-            else Debug.LogError($"[DataHeist] Scene '{scene}' is not in Build Settings. Run Data Heist > Setup Project.");
-        }
+        static void Load(string scene) => SceneFader.Load(scene);
     }
 }

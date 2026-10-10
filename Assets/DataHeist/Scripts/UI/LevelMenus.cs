@@ -64,39 +64,17 @@ namespace DataHeist
 
         void BuildPause(RectTransform root)
         {
-            var box = Modal("Pause", root, DH.Cyan, new Vector2(280, 250), out _pause);
+            var box = Modal("Pause", root, DH.Cyan, new Vector2(280, 272), out _pause);
             Title(box, "PAUSED", DH.Cyan);
-            Slider(box, "MUSIC", SaveSystem.Data.musicVolume, v => { SaveSystem.Data.musicVolume = v; SaveSystem.Save(); AudioManager.I.ApplyVolumes(); });
-            Slider(box, "SOUND FX", SaveSystem.Data.sfxVolume, v => { SaveSystem.Data.sfxVolume = v; SaveSystem.Save(); });
+            var d = SaveSystem.Data;
+            UIKit.Slider(box, "MASTER", d.masterVolume, v => { d.masterVolume = v; GameSettings.ApplyAudio(); SaveSystem.Save(); });
+            UIKit.Slider(box, "MUSIC", d.musicVolume, v => { d.musicVolume = v; GameSettings.ApplyAudio(); SaveSystem.Save(); });
+            UIKit.Slider(box, "SOUND FX", d.sfxVolume, v => { d.sfxVolume = v; SaveSystem.Save(); });
             _resumeBtn = Btn(box, "RESUME", () => OnResume?.Invoke(), true);
             Btn(box, "CONTROLS", ShowControls);
             Btn(box, "RESTART LEVEL", () => OnRestart?.Invoke());
             Btn(box, "QUIT TO RUNNERS", () => OnQuitToRunners?.Invoke());
             Btn(box, "MAIN MENU", () => OnQuitToMenu?.Invoke());
-        }
-
-        void Slider(Transform parent, string label, float value, Action<float> onChange)
-        {
-            var row = UIKit.Rect(label, parent);
-            UIKit.Size(row, 16);
-            var t = UIKit.Text("Label", row, label, 7, DH.Ink);
-            t.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(80, 12));
-            var sr = UIKit.Rect("Slider", row);
-            sr.anchorMin = new Vector2(0, 0.5f); sr.anchorMax = new Vector2(1, 0.5f);
-            sr.offsetMin = new Vector2(90, -4); sr.offsetMax = new Vector2(0, 4);
-            var bg = UIKit.Image("Bg", sr, DH.PurpleLine); bg.rectTransform.Stretch();
-            var fillArea = UIKit.Rect("FillArea", sr).Stretch();
-            var fill = UIKit.Image("Fill", fillArea, DH.Pink); fill.rectTransform.Stretch();
-            var handleArea = UIKit.Rect("HandleArea", sr).Stretch();
-            var handle = UIKit.Image("Handle", handleArea, Color.white);
-            handle.rectTransform.sizeDelta = new Vector2(6, 12);
-            var s = sr.gameObject.AddComponent<Slider>();
-            s.fillRect = fill.rectTransform;
-            s.handleRect = handle.rectTransform;
-            s.targetGraphic = handle;
-            s.minValue = 0; s.maxValue = 1;
-            s.value = value;
-            s.onValueChanged.AddListener(v => onChange(v));
         }
 
         void BuildControls(RectTransform root)

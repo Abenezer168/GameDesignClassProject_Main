@@ -21,6 +21,7 @@ namespace DataHeist
         public const string SceneMainMenu = "MainMenuScreenScene";
         public const string SceneCharacterSelect = "CharacterSelectScene";
         public const string SceneLevel01 = "Level01_NeonRooftops";
+        public const string SceneStory = "StoryScene";
 
         // Sorting orders (single sorting layer keeps setup zero-config)
         public const int SortSky = -200, SortFar = -190, SortMid = -180, SortNear = -170;

@@ -22,8 +22,14 @@ namespace DataHeist
         public string selected = "kai";
         public List<string> cleared = new List<string>();
         public List<LevelRecord> records = new List<LevelRecord>();
+        public float masterVolume = 1f;
         public float musicVolume = 0.6f;
         public float sfxVolume = 0.8f;
+        public int resolutionWidth;                         // 0 = keep the current/native resolution
+        public int resolutionHeight;
+        public bool fullscreen = true;
+        public bool vsync = true;
+        public bool storySeen;
     }
 
     /// <summary>PlayerPrefs-backed JSON save. One global instance; call Save() after changes.</summary>
@@ -40,7 +46,9 @@ namespace DataHeist
                 try
                 {
                     var json = PlayerPrefs.GetString(Key, "");
-                    _data = string.IsNullOrEmpty(json) ? new SaveData() : JsonUtility.FromJson<SaveData>(json);
+                    // overwrite a fresh instance so fields added after a save was written keep their defaults
+                    _data = new SaveData();
+                    if (!string.IsNullOrEmpty(json)) JsonUtility.FromJsonOverwrite(json, _data);
                 }
                 catch (Exception e)
                 {

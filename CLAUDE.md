@@ -9,11 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Repository layout
 
 - `Assets/DataHeist/` — essentially all game code and content (namespace `DataHeist`; editor code in `DataHeist.EditorTools`). No asmdefs, so everything compiles into `Assembly-CSharp` / `Assembly-CSharp-Editor`.
-- `Assets/Scenes/` + `Assets/Scripts/ButtonManagerScript.cs` — the team's original menu scenes (MainMenu, Options, Shop, GameScreen, GameOver) using plain scene-name-string navigation. Main Menu "Play" loads `CharacterSelectScene`.
+- `Assets/Scenes/` + `Assets/Scripts/ButtonManagerScript.cs` — the team's original menu scenes (MainMenu, Options, Shop, GameScreen, GameOver) using plain scene-name-string navigation. `MainMenuScreenScene` is still the boot scene, but at load time `MainMenuInstaller` (in `MainMenuController.cs`) hides its old Canvas and builds the Data Heist title screen in code. Settings live in `SettingsPanel`, so the old Options/Shop scenes are no longer reached from the menu.
 - `Tools/DataHeistGenerators/` — Python generators that produce all art, audio and level JSON.
 - `Tools/WebPrototype/` — standalone browser build of Level 1 (`the-data-heist.html`).
 - `Plugins/Libraries/` — a third-party helper library (BugFreeProductionsLibrary) sitting **outside `Assets/`**, so Unity does not compile it and the game doesn't use it.
-- `GameDesignClassProject_Main/` (nested, untracked) is a stray copy of the project — ignore it.
+- `GameDesignClassProject_Main/` (nested, untracked) is a second clone of the repo on `main`. The user's Unity editor has sometimes had *that* copy open, so changes made here won't show up in it until they open this folder instead.
 - `*.csproj` / `*.slnx` are Unity-generated and gitignored.
 
 ## Commands
@@ -23,6 +23,15 @@ There is no CLI build/lint/test pipeline; work happens in the Unity Editor via t
 - **Data Heist > Play Level 1** — jump straight into the level.
 - **Data Heist > Validate Level 1 (Playtest Bot)** — the closest thing to a test suite. Beam-searches inputs through the real `RunnerSim` and must find a zero-hit, no-ability clear for every runner. Run it after any change to `RunnerSim` or the level JSON.
 - **Data Heist > Debug > Unlock All Runners + 1000 Bytes** / **Reset Save Data**.
+- **Data Heist > Debug > Smoke Test**: a play-mode run through the title screen, Settings, Character Select and Level 1. It fails on any console error and writes screenshots to `Logs/Screens/`.
+
+Both checks also run headless. This only works while the project is **not** open in an editor; the user's editor may have the nested clone open, which is fine:
+```bash
+UNITY=/Applications/Unity/Hub/Editor/6000.3.22f1/Unity.app/Contents/MacOS/Unity
+$UNITY -batchmode -quit -projectPath "$PWD" -executeMethod DataHeist.EditorTools.PlaytestBot.ValidateLevel1 -logFile /tmp/bot.log
+$UNITY -batchmode -projectPath "$PWD" -executeMethod DataHeist.EditorTools.SmokeTest.RunBatch -logFile /tmp/smoke.log   # exit code 1 on failure
+```
+Compile errors show up in the log as `error CS`. Screenshots in `Logs/Screens/*.png` are the way to check layout.
 
 Asset regeneration (needs Python 3 + numpy, scipy, Pillow, and ffmpeg):
 ```bash
