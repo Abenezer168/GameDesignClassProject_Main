@@ -21,6 +21,10 @@ namespace DataHeist
         /// <summary>Panel to open as soon as the home page appears ("options" or "shop").</summary>
         public static string OpenOnStart;
 
+        // the press-any-key gate is shown once per launch; nothing makes a sound before it
+        static bool _started;
+        TextMeshProUGUI _pressStart, _hint;
+
         readonly List<Button> _buttons = new List<Button>();
         readonly List<string> _descriptions = new List<string>();
         TextMeshProUGUI _logo, _logoCyan, _logoPink, _desc;
@@ -40,8 +44,9 @@ namespace DataHeist
             _backdrop.AddTower(0.66f);
             BuildUI();
             ScreenFX.Add();
-            AudioManager.I.Music("music_menu");
             SceneFader.FadeIn(0.6f);
+            if (_started || OpenOnStart != null) { _started = true; EnterMenu(); }
+            else ShowPressStart();
         }
 
         void BuildUI()
@@ -111,8 +116,8 @@ namespace DataHeist
             _bestText.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -26), new Vector2(150, 10));
             RefreshProgress();
 
-            var hint = UIKit.Text("Hint", menu, "UP/DOWN  NAVIGATE      ENTER  SELECT", 5, new Color(1, 1, 1, 0.45f));
-            hint.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(34, 16), new Vector2(300, 10));
+            _hint = UIKit.Text("Hint", menu, "UP/DOWN  NAVIGATE      ENTER  SELECT", 5, new Color(1, 1, 1, 0.45f));
+            _hint.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(34, 16), new Vector2(300, 10));
 
             _settings = SettingsPanel.Create(root);
             _settings.OnClosed += () => { _menuRoot.SetActive(true); UIKit.Select(_buttons[3]); };
@@ -120,6 +125,45 @@ namespace DataHeist
             _shop.OnClosed += () => { _menuRoot.SetActive(true); UIKit.Select(_buttons[2]); };
             _shop.OnChanged += () => { RefreshProgress(); _backdrop.runnerId = GameSession.SelectedCharacter; };
 
+        }
+
+        void ShowPressStart()
+        {
+            _menuRoot.SetActive(true);
+            foreach (var b in _buttons) b.gameObject.SetActive(false);
+            _desc.gameObject.SetActive(false);
+            _hint.gameObject.SetActive(false);
+            _pressStart = UIKit.Text("PressStart", (RectTransform)_menuRoot.transform, "PRESS ANY KEY", 9, DH.Cyan);
+            _pressStart.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(34, -150), new Vector2(300, 14));
+        }
+
+        /// <summary>Player pressed a key on the title: story on first launch, otherwise the menu.</summary>
+        void PressStart()
+        {
+            _started = true;
+            AudioManager.I.Sfx("ui_select", 0.8f);
+            if (!SaveSystem.Data.storySeen && Application.CanStreamedLevelBeLoaded(DH.SceneStory))
+            {
+                SceneFader.Load(DH.SceneStory, 0.6f, 0.5f);
+                return;
+            }
+            Destroy(_pressStart.gameObject);
+            StartCoroutine(RevealMenu());
+        }
+
+        // a frame later, so the key that dismissed the title can't also press PLAY
+        System.Collections.IEnumerator RevealMenu()
+        {
+            yield return null;
+            foreach (var b in _buttons) b.gameObject.SetActive(true);
+            _desc.gameObject.SetActive(true);
+            _hint.gameObject.SetActive(true);
+            EnterMenu();
+        }
+
+        void EnterMenu()
+        {
+            AudioManager.I.Music("music_menu");
             UIKit.Select(_buttons[0]);
             OnSelect(0);
             var open = OpenOnStart;
@@ -175,6 +219,13 @@ namespace DataHeist
 
         void Update()
         {
+            if (!_started)
+            {
+                UpdateGlitch(Time.unscaledDeltaTime);
+                _pressStart.alpha = Mathf.Repeat(Time.unscaledTime, 1.2f) < 0.8f ? 1f : 0.2f;
+                if (AnyPress()) PressStart();
+                return;
+            }
             // keep a selection when the mouse clicks empty space, so keyboard/gamepad never get lost
             if (_menuRoot.activeSelf && EventSystem.current != null && EventSystem.current.currentSelectedGameObject == null)
                 UIKit.Select(_buttons[_selected]);
@@ -188,7 +239,6 @@ namespace DataHeist
             {
                 _glitchLeft = UnityEngine.Random.Range(0.08f, 0.22f);
                 _glitchT = UnityEngine.Random.Range(2.5f, 6f);
-                AudioManager.I.Sfx("glitch", 0.12f, 1.6f);
             }
             float jitter = 0;
             if (_glitchLeft > 0)
@@ -200,6 +250,16 @@ namespace DataHeist
             _logoCyan.rectTransform.anchoredPosition = basePos + new Vector2(-1 - jitter, jitter * 0.3f);
             _logoPink.rectTransform.anchoredPosition = basePos + new Vector2(1 + jitter, 0);
             _logo.rectTransform.anchoredPosition = basePos + new Vector2(_glitchLeft > 0 && UnityEngine.Random.value < 0.3f ? jitter : 0, 0);
+        }
+
+        static bool AnyPress()
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            var pad = UnityEngine.InputSystem.Gamepad.current;
+            return (kb != null && kb.anyKey.wasPressedThisFrame)
+                   || (mouse != null && mouse.leftButton.wasPressedThisFrame)
+                   || (pad != null && (pad.buttonSouth.wasPressedThisFrame || pad.startButton.wasPressedThisFrame));
         }
 
         // ------------------------------------------------------------------ actions
@@ -281,8 +341,8 @@ namespace DataHeist
     /// <summary>
     /// Puts the Data Heist title screen into MainMenuScreenScene at load time: the team's old
     /// canvas and its manager are switched off (not deleted), so the scene file stays untouched.
-    /// Until the player has seen the story intro, the home page hands over to StoryScene first;
-    /// the intro returns here when it ends or is skipped.
+    /// The title waits for a key press; on first launch that press plays the story intro, which
+    /// returns here when it ends or is skipped.
     /// </summary>
     static class MainMenuInstaller
     {
@@ -309,11 +369,6 @@ namespace DataHeist
             if (UnityEngine.Object.FindAnyObjectByType<MainMenuController>() != null) return;
             foreach (var go in scene.GetRootGameObjects())
                 if (Array.IndexOf(LegacyRoots, go.name) >= 0) go.SetActive(false);
-            if (!SaveSystem.Data.storySeen && Application.CanStreamedLevelBeLoaded(DH.SceneStory))
-            {
-                SceneManager.LoadScene(DH.SceneStory);
-                return;
-            }
             new GameObject("DataHeist Main Menu").AddComponent<MainMenuController>();
         }
 

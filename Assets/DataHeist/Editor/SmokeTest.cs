@@ -151,12 +151,20 @@ namespace DataHeist.EditorTools
             SaveSystem.Data.bytes = 1000;
             if (SaveSystem.Data.unlocked.Contains("jax")) SaveSystem.Data.unlocked.Remove("jax");
             SaveSystem.Save();
+            typeof(MainMenuController).GetField("_started", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static).SetValue(null, false);
+            AudioManager.I.StopMusic();
             SceneManager.LoadScene(DH.SceneMainMenu);
             yield return 2f;
-            Check(SceneManager.GetActiveScene().name == DH.SceneStory, "first launch opens the story before the home page");
+            var title = Object.FindAnyObjectByType<MainMenuController>();
+            Check(title != null && GameObject.Find("PressStart") != null, "launch shows PRESS ANY KEY on the title");
+            AudioAudit("title before any key", 0);
+            foreach (var w in Shot("00_press_start")) yield return w;
+            title?.SendMessage("PressStart");
+            yield return 2f;
+            Check(SceneManager.GetActiveScene().name == DH.SceneStory, "first key press on first launch opens the story");
             var story = Object.FindAnyObjectByType<StoryController>();
             Check(story != null, "story intro running");
-            AudioAudit("story");
+            AudioAudit("story", 1);
             if (story != null)
             {
                 Check(story.ShotCount == 6, $"story has {story.ShotCount} shots");
@@ -181,7 +189,8 @@ namespace DataHeist.EditorTools
             Check(Object.FindAnyObjectByType<MainMenuController>() != null, "title menu installed into " + DH.SceneMainMenu);
             var legacy = GameObject.Find("Canvas");
             Check(legacy == null || !legacy.activeInHierarchy, "legacy main menu canvas hidden");
-            AudioAudit("home page");
+            AudioAudit("home page", 1);
+            Check(GameObject.Find("PressStart") == null, "home page goes straight to the menu after the first press");
 
             // --- options: sliders must really change the volume
             var settings = Object.FindAnyObjectByType<SettingsPanel>(FindObjectsInactive.Include);
@@ -250,15 +259,18 @@ namespace DataHeist.EditorTools
             yield return 2f;
             Check(SceneManager.GetActiveScene().name == DH.SceneCharacterSelect, "character select loads");
             Check(Object.FindAnyObjectByType<CharacterSelectController>() != null, "character select running");
-            AudioAudit("character select");
+            AudioAudit("character select", 1);
             foreach (var w in Shot("07_character_select")) yield return w;
 
             SceneFader.Load(DH.SceneLevel01);
-            yield return 6f;
+            yield return 2.2f;
+            AudioAudit("level 1 countdown", 0);
+            yield return 3.8f;
             var level = Object.FindAnyObjectByType<LevelController>();
             Check(level != null && level.Sim != null, "level 1 running");
             if (level != null && level.Sim != null) Check(level.Sim.p.x > 5f, $"runner is moving (x = {level.Sim.p.x:F1})");
-            AudioAudit("level 1");
+            AudioAudit("level 1", 1);
+            Check(AudioManager.I.CurrentMusic == "music_level01", "level music starts on GO");
             foreach (var w in Shot("08_level01")) yield return w;
         }
 
@@ -269,20 +281,20 @@ namespace DataHeist.EditorTools
             return null;
         }
 
-        /// <summary>Exactly one music track and one listener may be active on any screen.</summary>
-        static void AudioAudit(string where)
+        /// <summary>Checks how many music tracks play (never more than one) and that there is one listener.</summary>
+        static void AudioAudit(string where, int expectedMusic)
         {
             int music = 0, other = 0;
             var names = new List<string>();
             foreach (var a in Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None))
             {
-                if (a.loop && a.isPlaying) { music++; names.Add($"{a.gameObject.name}:{(a.clip != null ? a.clip.name : "-")}"); }
+                if (a.loop && a.isPlaying && a.volume > 0.001f) { music++; names.Add($"{a.gameObject.name}:{(a.clip != null ? a.clip.name : "-")}"); }
                 else if (a.isPlaying) other++;
             }
             int listeners = 0;
             foreach (var l in Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None))
                 if (l.enabled && l.gameObject.activeInHierarchy) listeners++;
-            Check(music == 1, $"{where}: {music} music track(s) playing [{string.Join(", ", names)}]");
+            Check(music == expectedMusic, $"{where}: {music} music track(s) playing, expected {expectedMusic} [{string.Join(", ", names)}]");
             Check(listeners == 1, $"{where}: {listeners} audio listener(s)");
         }
 

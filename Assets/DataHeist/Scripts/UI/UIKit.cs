@@ -183,8 +183,10 @@ namespace DataHeist
         public static void Select(Selectable s)
         {
             if (s == null || EventSystem.current == null) return;
+            UIHoverSound.Suppress = true;
             EventSystem.current.SetSelectedGameObject(null);
             EventSystem.current.SetSelectedGameObject(s.gameObject);
+            UIHoverSound.Suppress = false;
         }
 
         /// <summary>Labelled 0..1 slider row (label on the left, bar on the right, percent readout).</summary>

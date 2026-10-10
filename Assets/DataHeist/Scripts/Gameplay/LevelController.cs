@@ -21,6 +21,8 @@ namespace DataHeist
 
         public RunnerSim Sim { get; private set; }
 
+        string LevelMusic => "music_" + levelId;
+
         LevelData _level;
         CharacterDefinition _ch;
         RunnerInput _input;
@@ -72,7 +74,8 @@ namespace DataHeist
 
             _cam.Bind(Sim);
             _countdown = introCountdown;
-            AudioManager.I.Music("music_level01", true);
+            // the menu track fades out during 3-2-1; the level track starts on GO
+            AudioManager.I.StopMusic();
         }
 
         void OnDestroy()
@@ -110,7 +113,11 @@ namespace DataHeist
                 {
                     _lastCount = c;
                     if (c > 0 && c <= 3) AudioManager.I.Sfx("count", 0.6f);
-                    else if (c <= 0) AudioManager.I.Sfx("go", 0.7f);
+                    else if (c <= 0)
+                    {
+                        AudioManager.I.Sfx("go", 0.7f);
+                        if (AudioManager.I.CurrentMusic != LevelMusic) AudioManager.I.Music(LevelMusic, true);
+                    }
                 }
                 _hud.SetCountdown(_countdown, Sim.stats.deaths == 0, _level);
                 _jumpLatch = _slideLatch = _attackLatch = _abilityLatch = false;

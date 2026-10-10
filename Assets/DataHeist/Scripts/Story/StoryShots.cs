@@ -38,6 +38,8 @@ namespace DataHeist
         public abstract Vector2 CameraAt(float t);
 
         public virtual void Enter() { }
+        /// <summary>Called once the cut has faded in and the shot is on screen; start its sounds here.</summary>
+        public virtual void Revealed() { }
         public virtual void Tick(float t, float dt) { }
         public virtual void Exit() { }
 
@@ -199,7 +201,7 @@ namespace DataHeist
 
         public override Vector2 CameraAt(float t) => new Vector2(X, CamY);  // vault art is exactly one screen
 
-        public override void Enter() => AudioManager.I.Sfx("shard", 0.55f, 0.8f);
+        public override void Revealed() => AudioManager.I.Sfx("shard", 0.55f, 0.8f);
 
         public override void Tick(float t, float dt)
         {
@@ -377,11 +379,9 @@ namespace DataHeist
 
         public override Vector2 CameraAt(float t) => new Vector2(X + t * Speed, GroundCamY);
 
-        public override void Enter()
-        {
-            AudioManager.I.Sfx("alarm", 0.5f);
-            story.Alarm = true;
-        }
+        public override void Enter() => story.Alarm = true;
+
+        public override void Revealed() => AudioManager.I.Sfx("alarm", 0.45f);
 
         public override void Exit() => story.Alarm = false;
 

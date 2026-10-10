@@ -5,7 +5,8 @@ namespace DataHeist
 {
     /// <summary>
     /// Persistent audio service: pooled one-shot SFX + one looping music track.
-    /// Clips are loaded lazily from Resources/DataHeist/Audio.
+    /// Music changes crossfade (the old track fades out before the new one fades in), so two
+    /// tracks are never heard at once. Clips are loaded lazily from Resources/DataHeist/Audio.
     /// </summary>
     public class AudioManager : MonoBehaviour
     {
@@ -28,6 +29,12 @@ namespace DataHeist
         string _musicName;
         float _musicDuck = 1f;
         float _targetPitch = 1f;
+        // crossfade state: _fade is the current gain of the music source (0..1)
+        float _fade = 1f;
+        AudioClip _pending;
+        string _pendingName;
+        bool _stopping;
+        const float FadeOut = 0.35f, FadeIn = 0.6f;
 
         void Awake()
         {
@@ -47,13 +54,33 @@ namespace DataHeist
 
         void Update()
         {
-            if (_music != null)
-                _music.pitch = Mathf.MoveTowards(_music.pitch, _targetPitch, Time.unscaledDeltaTime * 2f);
+            if (_music == null) return;
+            float dt = Time.unscaledDeltaTime;
+            _music.pitch = Mathf.MoveTowards(_music.pitch, _targetPitch, dt * 2f);
+            if (_pending != null || _stopping)
+            {
+                _fade = _music.isPlaying ? _fade - dt / FadeOut : 0f;
+                if (_fade <= 0f)
+                {
+                    _fade = 0f;
+                    if (_stopping) { _music.Stop(); _musicName = null; _stopping = false; }
+                    else
+                    {
+                        _music.clip = _pending;
+                        _musicName = _pendingName;
+                        _music.pitch = _targetPitch = 1f;
+                        _music.Play();
+                        _pending = null;
+                    }
+                }
+            }
+            else if (_fade < 1f) _fade = Mathf.Min(1f, _fade + dt / FadeIn);
+            ApplyVolumes();
         }
 
         public void ApplyVolumes()
         {
-            if (_music != null) _music.volume = SaveSystem.Data.musicVolume * 0.55f * _musicDuck;
+            if (_music != null) _music.volume = SaveSystem.Data.musicVolume * 0.55f * _musicDuck * _fade;
         }
 
         AudioClip Clip(string path, bool warnIfMissing = true)
@@ -84,16 +111,26 @@ namespace DataHeist
             src.Play();
         }
 
+        /// <summary>Crossfades to a looping track. Asking for the track that is already playing does nothing unless restart is set.</summary>
         public void Music(string name, bool restart = false)
         {
-            if (_musicName == name && !restart && _music.isPlaying) return;
+            _stopping = false;
+            if (!restart && _pending == null && _musicName == name && _music.isPlaying) return;
+            if (!restart && _pendingName == name && _pending != null) return;
             var clip = Clip(DH.MusicPath + name);
             if (clip == null) return;
-            _musicName = name;
-            _music.clip = clip;
-            _music.pitch = _targetPitch = 1f;
-            _music.Play();
+            _pending = clip;
+            _pendingName = name;
         }
+
+        /// <summary>Fades the current track out and stops it.</summary>
+        public void StopMusic()
+        {
+            _pending = null; _pendingName = null;
+            _stopping = _music.isPlaying;
+        }
+
+        public string CurrentMusic => _pending != null ? _pendingName : _music != null && _music.isPlaying ? _musicName : null;
 
         public void MusicPitch(float p) => _targetPitch = p;
 

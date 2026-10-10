@@ -20,10 +20,9 @@ namespace DataHeist
     {
         // the intro always lands on the home page (not serialized, so scene files can't go stale)
         const string NextScene = DH.SceneMainMenu;
-        [Tooltip("Typewriter speed")]
-        public float charsPerSecond = 42f;
-        [Tooltip("Seconds a finished caption stays up before the next shot plays on its own")]
-        public float autoAdvanceDelay = 4.5f;
+        // tuning lives in code, not the scene file, so saved scenes can't override it
+        const float CharsPerSecond = 42f;
+        const float AutoAdvanceDelay = 0f;   // seconds before a finished caption moves on by itself (0 = wait for the player)
 
         /// <summary>A UI caption pinned to a world position (keeps the pixel font crisp).</summary>
         public class WorldLabel
@@ -73,6 +72,13 @@ namespace DataHeist
             AudioManager.I.MusicOr("music_story", "music_menu");
             SceneFader.FadeIn(0.8f);
             Show(0);
+            StartCoroutine(RevealFirst());
+        }
+
+        IEnumerator RevealFirst()
+        {
+            yield return new WaitForSecondsRealtime(0.8f);   // after the fade-in
+            _shots[0].Revealed();
         }
 
         void AddShot<T>(string chapter, string text) where T : StoryShot, new()
@@ -249,6 +255,7 @@ namespace DataHeist
             yield return Glitch(0.16f, 0, 1);
             Show(i);
             yield return Glitch(0.28f, 1, 0);
+            _shots[i].Revealed();
             _busy = false;
         }
 
@@ -344,7 +351,7 @@ namespace DataHeist
             if (_intro < 1 || _busy) return;
             if (Typing)
             {
-                _typeT += dt * charsPerSecond;
+                _typeT += dt * CharsPerSecond;
                 while (_typeT >= 1 && Typing)
                 {
                     _typeT -= 1;
@@ -352,7 +359,7 @@ namespace DataHeist
                     _visible++;
                     if (ch == '.' || ch == ':') _typeT -= 9;       // beat after a sentence
                     else if (ch == ',') _typeT -= 4;
-                    if (ch != ' ' && _visible % 2 == 0) AudioManager.I.Sfx("ui_move", 0.12f, UnityEngine.Random.Range(1.5f, 1.7f));
+                    if (ch != ' ' && _visible % 3 == 0) AudioManager.I.Sfx("ui_move", 0.08f, UnityEngine.Random.Range(1.5f, 1.7f));
                 }
                 _body.maxVisibleCharacters = _visible;
                 _nextHint.alpha = 0;
@@ -360,7 +367,7 @@ namespace DataHeist
             }
             _doneT += dt;
             _nextHint.alpha = Mathf.Repeat(Time.unscaledTime, 1f) < 0.6f ? 1 : 0.25f;
-            if (_doneT >= autoAdvanceDelay) Next();
+            if (AutoAdvanceDelay > 0 && _doneT >= AutoAdvanceDelay) Next();
         }
 
         void HandleInput()
