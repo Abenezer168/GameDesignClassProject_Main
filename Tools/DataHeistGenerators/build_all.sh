@@ -13,10 +13,10 @@ python3 $TOOLS/gen_story.py "$RES"
 python3 $TOOLS/gen_keyart.py "$RES"   # reads the sprites written above
 python3 $TOOLS/gen_level.py "$RES/Levels/level01.json"
 python3 $TOOLS/gen_audio.py /tmp/dh_audio >/dev/null
-cp /tmp/dh_audio/SFX/*.wav "$RES/Audio/SFX/"
-for f in /tmp/dh_audio/Music/*.wav; do
-  ffmpeg -hide_banner -loglevel error -y -i "$f" -c:a libvorbis -q:a 5 "$RES/Audio/Music/$(basename "${f%.wav}").ogg"
-done
+# Unity audio: real CC0 sound (Kenney SFX + OpenGameArt music) mixed by build_audio.py.
+# Only the siren and the level-complete jingle stay synthesised (build_audio levels them).
+cp /tmp/dh_audio/SFX/sfx_alarm.wav /tmp/dh_audio/SFX/sfx_level_complete.wav "$RES/Audio/SFX/"
+python3 $TOOLS/build_audio.py "$RES"     # needs: pip install numpy scipy soundfile pyloudnorm
 
 # web copies
 mkdir -p $WEB/build/audio

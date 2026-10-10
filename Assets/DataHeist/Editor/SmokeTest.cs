@@ -67,6 +67,8 @@ namespace DataHeist.EditorTools
         {
             if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
                 Errors.Add($"{type}: {msg}\n{stack}");
+            // a missing clip or sprite is only a warning in game, but a broken build here
+            else if (msg.StartsWith("[DataHeist] Missing")) Errors.Add("Missing asset: " + msg);
         }
 
         static void Tick()
@@ -169,6 +171,9 @@ namespace DataHeist.EditorTools
             var story = Object.FindAnyObjectByType<StoryController>();
             Check(story != null, "story intro running");
             AudioAudit("story", 1);
+            Check(AudioManager.I.CurrentMusic == "music_story", $"story plays its own track ({AudioManager.I.CurrentMusic})");
+            yield return 1f;   // crossfade
+            Check(AudioManager.I.CurrentMusic == "music_story", $"story plays its own track ({AudioManager.I.CurrentMusic})");
             if (story != null)
             {
                 Check(story.ShotCount == 6, $"story has {story.ShotCount} shots");
@@ -195,6 +200,11 @@ namespace DataHeist.EditorTools
             Check(demo != null && demo.Sim != null && demo.Sim.p.x > 3f, $"attract demo is playing Level 1 (x = {(demo != null && demo.Sim != null ? demo.Sim.p.x : 0):F1})");
             Check(demo != null && demo.Sim.stats.hits == 0, "demo run replays cleanly (no hits)");
             AudioAudit("home page", 1);
+            Check(AudioManager.I.CurrentMusic == "music_menu", "home page plays the menu track");
+            // every sound effect the game can play must load
+            int sfx = 0;
+            foreach (var clip in Resources.LoadAll<AudioClip>(DH.Root + "Audio/SFX")) { sfx++; Check(clip.length > 0.005f, $"{clip.name} loads ({clip.length * 1000:F0} ms)"); }
+            Check(sfx >= 28, $"{sfx} sound effects in Resources");
             Check(GameObject.Find("PressStart") == null, "home page goes straight to the menu after the first press");
 
             // --- options: sliders must really change the volume
@@ -224,6 +234,10 @@ namespace DataHeist.EditorTools
                 foreach (var w in Shot("03_options_video")) yield return w;
                 settings.SendMessage("ShowTab", 2);
                 foreach (var w in Shot("04_options_controls")) yield return w;
+                settings.SendMessage("ShowTab", 3);
+                foreach (var w in Shot("04b_options_credits")) yield return w;
+                settings.SendMessage("ShowTab", 3);
+                foreach (var w in Shot("04b_options_credits")) yield return w;
                 settings.Close();
                 yield return 0.3f;
                 Check(!settings.IsOpen, "options closes");

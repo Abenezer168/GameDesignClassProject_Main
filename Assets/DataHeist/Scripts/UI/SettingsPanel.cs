@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace DataHeist
 {
     /// <summary>
-    /// Settings modal with AUDIO / VIDEO / CONTROLS tabs. Every change is applied and saved
+    /// Settings modal with AUDIO / VIDEO / CONTROLS / CREDITS tabs. Every change is applied and saved
     /// immediately (SaveSystem + GameSettings; key bindings via RunnerInput's PlayerPrefs overrides,
     /// which the levels load on start).
     /// </summary>
@@ -17,8 +17,8 @@ namespace DataHeist
         public event Action OnClosed;
 
         RunnerInput _input;
-        GameObject _audio, _video, _controls;
-        Button _audioTab, _videoTab, _controlsTab, _back;
+        GameObject _audio, _video, _controls, _credits;
+        Button _audioTab, _videoTab, _controlsTab, _creditsTab, _back;
         Selectable _audioFirst, _videoFirst, _controlsFirst;
         readonly List<(InputAction action, Button button)> _bindButtons = new List<(InputAction, Button)>();
         InputActionRebindingExtensions.RebindingOperation _rebind;
@@ -57,6 +57,7 @@ namespace DataHeist
             _audioTab = UIKit.Button("AudioTab", tabs, "AUDIO", () => ShowTab(0), false);
             _videoTab = UIKit.Button("VideoTab", tabs, "VIDEO", () => ShowTab(1), false);
             _controlsTab = UIKit.Button("ControlsTab", tabs, "CONTROLS", () => ShowTab(2), false);
+            _creditsTab = UIKit.Button("CreditsTab", tabs, "CREDITS", () => ShowTab(3), false);
 
             RectTransform Page(string name, out GameObject go)
             {
@@ -117,6 +118,12 @@ namespace DataHeist
             var reset = UIKit.Button("Reset", c, "RESET DEFAULTS", () => { CancelRebind(); _input.ResetOverrides(); RefreshBindings(); }, false);
             UIKit.Size(reset, 17);
 
+            // CREDITS ----------------------------------------------------------
+            var cr = Page("Credits", out _credits);
+            var credits = UIKit.Text("Text", cr, CreditsText(), 5, DH.Ink, TextAlignmentOptions.Center);
+            credits.lineSpacing = 14;
+            UIKit.Size(credits, 150);
+
             _hint = UIKit.Text("Hint", inner, "", 5, DH.Dim, TextAlignmentOptions.Center);
             _hint.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0, 26), new Vector2(340, 10));
             _back = UIKit.Button("Back", inner, "BACK", Close, true);
@@ -151,10 +158,31 @@ namespace DataHeist
         void ShowTab(int i)
         {
             CancelRebind();
-            _audio.SetActive(i == 0); _video.SetActive(i == 1); _controls.SetActive(i == 2);
-            Mark(_audioTab, i == 0); Mark(_videoTab, i == 1); Mark(_controlsTab, i == 2);
-            _hint.text = i == 2 ? "SELECT AN ACTION, THEN PRESS THE NEW KEY.  ESC CANCELS." : "< > CHANGE      ESC BACK";
-            UIKit.Select(i == 0 ? _audioFirst : i == 1 ? _videoFirst : _controlsFirst);
+            _audio.SetActive(i == 0); _video.SetActive(i == 1); _controls.SetActive(i == 2); _credits.SetActive(i == 3);
+            Mark(_audioTab, i == 0); Mark(_videoTab, i == 1); Mark(_controlsTab, i == 2); Mark(_creditsTab, i == 3);
+            _hint.text = i == 2 ? "SELECT AN ACTION, THEN PRESS THE NEW KEY.  ESC CANCELS." : i == 3 ? "ESC BACK" : "< > CHANGE      ESC BACK";
+            UIKit.Select(i == 0 ? _audioFirst : i == 1 ? _videoFirst : i == 2 ? _controlsFirst : _creditsTab);
+        }
+
+        /// <summary>Credits screen; the audio lines come from Audio/CREDITS.txt written by build_audio.py.</summary>
+        static string CreditsText()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("<color=#2ff3ff>THE DATA HEIST</color>");
+            sb.AppendLine("<color=#8a7fb0>A GAME DESIGN CLASS PROJECT</color>");
+            sb.AppendLine();
+            sb.AppendLine("<color=#ff3fa4>GAME DESIGN, CODE AND PIXEL ART</color>");
+            sb.AppendLine("THE DATA HEIST CREW");
+            sb.AppendLine();
+            sb.AppendLine("<color=#ff3fa4>MUSIC AND SOUND</color>");
+            var audio = Resources.Load<TextAsset>(DH.Root + "Audio/CREDITS");
+            if (audio != null)
+                foreach (var line in audio.text.Split('\n'))
+                    if (line.Trim().Length > 0) sb.AppendLine(line.Trim().Replace("Sound effects: ", "").Replace("Music: ", ""));
+            sb.AppendLine();
+            sb.AppendLine("<color=#ff3fa4>FONT</color>");
+            sb.AppendLine("Press Start 2P by CodeMan38 (SIL Open Font License)");
+            return sb.ToString();
         }
 
         static void Mark(Button tab, bool on)

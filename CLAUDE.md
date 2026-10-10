@@ -33,6 +33,8 @@ $UNITY -batchmode -projectPath "$PWD" -executeMethod DataHeist.EditorTools.Smoke
 ```
 Compile errors show up in the log as `error CS`. Screenshots in `Logs/Screens/*.png` are the way to check layout.
 
+Audio is real CC0 sound (Kenney SFX + OpenGameArt music) built by `Tools/DataHeistGenerators/build_audio.py`. It needs `pip install numpy scipy soundfile pyloudnorm` and internet access for the first download. File names are the contract with code (`Sfx("jump")` → `Audio/SFX/sfx_jump.wav`, `Music("music_level02")` → `Audio/Music/music_level02.ogg`), and the README's **Audio** section maps every file to where it plays. Levels play `music_<levelId>` from GO.
+
 Asset regeneration (needs Python 3 + numpy, scipy, Pillow, and ffmpeg):
 ```bash
 Tools/DataHeistGenerators/build_all.sh                 # rebuild all art/audio/level + web build assets

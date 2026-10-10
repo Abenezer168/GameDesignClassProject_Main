@@ -113,12 +113,72 @@ Scenes/          CharacterSelectScene, Level01_NeonRooftops (one GameObject each
 
 **Data-driven levels.** Levels are JSON. `Tools/DataHeistGenerators/gen_level.py` authors them with helpers such as `byte_arc` (bytes that follow the real jump parabola) and `prompt`. To make Level 2, copy the script, change the sections, regenerate the JSON, then run the bot.
 
+## Audio
+
+All sound is real, CC0-licensed (public domain) audio. Credits appear in-game under **Options > Credits** and in `Resources/DataHeist/Audio/CREDITS.txt`.
+
+- **Sound effects** are mixed from four Kenney packs: Sci-Fi, Impact, Interface and Digital Audio.
+- **Music** comes from OpenGameArt.org.
+- `Tools/DataHeistGenerators/build_audio.py` builds every file. It downloads the pinned sources, mixes each effect's "recipe" (layers, slices, filters), then trims, fades and normalises it.
+- **Effects** are levelled to about −11 dB (UI sounds softer), so the volume numbers in the code are the mix. **Music** is matched to −16 LUFS and has click-free loop points.
+
+### Music (`Audio/Music`)
+
+| File | Track | Plays |
+|---|---|---|
+| `music_menu.ogg` | "Midnight Drive" by congusbongus | home page (after PRESS START), Character Select, results screen |
+| `music_story.ogg` | "Cyberpunk Moonlight Sonata" by joth | story intro |
+| `music_level01.ogg` | "Cyber Runner" by ansimuz | Level 1, from GO |
+| `music_level02.ogg` | "Cyber March" by iamoneabe (quiet intro trimmed) | Level 2, from GO |
+
+Silence is deliberate on the key-art splash (until the player presses start) and during the 3-2-1 countdown. Tracks crossfade, so two are never heard at once.
+
+### Sound effects (`Audio/SFX`, all `sfx_<name>.wav`)
+
+| Name | Made from (Kenney) | Plays when |
+|---|---|---|
+| `jump` | phaseJump3 + concrete footstep | the runner jumps |
+| `air_jump` | phaserUp6 + thruster burst | Kai's Kick Thrusters (second jump) |
+| `land` | concrete footstep + soft impact | landing (louder on hard landings) |
+| `slide` | filtered scratch + footstep | slide starts |
+| `dash` | force field + thruster | Nova's Phase Dash; dives use it pitched up |
+| `attack` | laserSmall + air swish | slash |
+| `hurt` | heavy punch + glitch + error | taking a hit |
+| `explode` | explosion crunch + sub-bass boom | a drone is destroyed |
+| `shoot` | laserRetro | a gunner drone fires |
+| `deflect` | metal impact + ricochet | slashing a bolt out of the air |
+| `emp` | low boom + force field + down-zap | Jax's EMP Pulse |
+| `glitch` | glitch stutters + down-zap | Lin's Time Glitch; story cuts |
+| `byte` | pepSound3 | collecting a Data Byte; pitch rises over a chain. Also the SFX volume test |
+| `repair` | powerUp11 | repair kit |
+| `shard` | three-tone zap up + powerUp12 | Data Shard pickup; vault shot in the story |
+| `pad` | phaserUp1 | jump pad |
+| `checkpoint` | confirmation + powerUp | checkpoint reached |
+| `unlock` | powerUp12 + confirmation | runner recruited (Shop, Character Select); job offer in the story |
+| `count` | tone1 | 3, 2, 1 |
+| `go` | highUp + confirmation | GO; story title card |
+| `game_over` | low three-tone + low boom | the run fails |
+| `denied` | error_006 | ability on cooldown, can't afford, story missing |
+| `alarm` | *synthesised siren* (gen_audio.py) | entering an alarm zone; the heist shot in the story |
+| `level_complete` | *synthesised jingle* (gen_audio.py) | reaching extraction |
+| `ui_move` | click_005 | hovering/moving between buttons; story typewriter |
+| `ui_select` | select_004 | pressing a button, PRESS START |
+| `ui_back` | back_002 | closing a menu, pausing, leaving a screen |
+| `step` | concrete footstep | not used yet |
+
+### Swapping in your own sounds
+
+- **Quick swap:** drop a file with the **same name** into `Audio/SFX` or `Audio/Music`. WAV, OGG and MP3 all work; the importer sets streaming for music and decompress-on-load for effects. Nothing in the code changes.
+- **Rebuilt swap (survives regeneration):** edit the recipe in `build_audio.py` (`SFX` for effects, `MUSIC` for tracks), then run `pip install numpy scipy soundfile pyloudnorm` and `python3 Tools/DataHeistGenerators/build_audio.py Assets/DataHeist/Resources/DataHeist`. Downloads are cached in `Tools/DataHeistGenerators/.audio_cache/` (gitignored).
+- **Mix:** per-moment volume is the second argument of each `AudioManager.I.Sfx("name", volume)` call, and the player's sliders scale everything (Options > Audio).
+
 ## Regenerating the art and audio
 
 All art and audio are original and procedurally generated. The scripts are in `Tools/DataHeistGenerators`:
 - `gen_characters.py`: skeleton-posed pixel runners
 - `gen_env.py`: tiles, props, drones, FX, UI, parallax
-- `gen_audio.py`: synthwave tracks and SFX
+- `gen_audio.py`: synthesised SFX and tracks. Unity now only uses its siren and level-complete jingle; the web prototype still uses all of it
+- `build_audio.py`: the game's real CC0 audio (see **Audio** above)
 - `gen_level.py`: the level JSON
 - `build_all.sh`: rebuilds everything
 

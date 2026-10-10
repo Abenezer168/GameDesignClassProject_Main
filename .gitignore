@@ -76,3 +76,6 @@ crashlytics-build.properties
 
 # Python bytecode from the asset generators
 __pycache__/
+
+# downloaded CC0 audio sources (build_audio.py fetches them)
+Tools/DataHeistGenerators/.audio_cache/
