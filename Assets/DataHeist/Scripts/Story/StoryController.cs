@@ -12,13 +12,14 @@ namespace DataHeist
     /// <summary>
     /// Cinematic story intro (StoryScene). Six staged shots play under a letterboxed caption bar
     /// with typewriter text. NEXT (Enter / Space / click / pad A) completes the line, then advances;
-    /// SKIP (Esc / pad Start) jumps to the end. Ends on a level title card, marks the story as
-    /// seen and continues to Character Select.
+    /// SKIP (Esc / pad Start) jumps to the end. Ends on the game's title card, marks the story as
+    /// seen and continues to the home page.
     /// Put this on one GameObject in an empty scene; everything else is built at runtime.
     /// </summary>
     public class StoryController : MonoBehaviour
     {
-        public string nextScene = DH.SceneCharacterSelect;
+        // the intro always lands on the home page (not serialized, so scene files can't go stale)
+        const string NextScene = DH.SceneMainMenu;
         [Tooltip("Typewriter speed")]
         public float charsPerSecond = 42f;
         [Tooltip("Seconds a finished caption stays up before the next shot plays on its own")]
@@ -238,7 +239,7 @@ namespace DataHeist
             _finished = true;
             SaveSystem.Data.storySeen = true;
             SaveSystem.Save();
-            SceneFader.Load(nextScene, 0.5f, 0.5f);
+            SceneFader.Load(NextScene, 0.5f, 0.5f);
         }
 
         IEnumerator CutTo(int i)
@@ -284,19 +285,19 @@ namespace DataHeist
             var card = UIKit.Rect("TitleCard", _root).Stretch();
             card.SetAsLastSibling();
             var group = card.gameObject.AddComponent<CanvasGroup>();
-            var sub = UIKit.Text("Shard", card, "SHARD 1 OF 5", 7, DH.Pink, TextAlignmentOptions.Center);
+            var sub = UIKit.Text("Shard", card, "THE", 7, DH.Amber, TextAlignmentOptions.Center);
             sub.characterSpacing = 40;
             sub.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 28), new Vector2(400, 12));
-            var title = UIKit.Text("Level", card, "NEON ROOFTOPS", 22, DH.Cyan, TextAlignmentOptions.Center);
+            var title = UIKit.Text("Level", card, "DATA HEIST", 26, DH.Cyan, TextAlignmentOptions.Center);
             title.textWrappingMode = TextWrappingModes.NoWrap;
             title.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(600, 30));
-            var where = UIKit.Text("Where", card, "SECTOR 7  //  23:47  //  HALCYON SECURITY: ACTIVE", 5, DH.Dim, TextAlignmentOptions.Center);
+            var where = UIKit.Text("Where", card, "STEAL THE SHARDS.  OWN THE NIGHT.", 6, DH.Dim, TextAlignmentOptions.Center);
             where.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -28), new Vector2(500, 10));
             AudioManager.I.Sfx("go", 0.6f);
             for (float t = 0; t < 0.5f; t += Time.unscaledDeltaTime) { group.alpha = t / 0.5f; yield return null; }
             group.alpha = 1;
             yield return new WaitForSecondsRealtime(2.2f);
-            SceneFader.Load(nextScene, 0.6f, 0.5f);
+            SceneFader.Load(NextScene, 0.6f, 0.5f);
         }
 
         // ------------------------------------------------------------------ loop

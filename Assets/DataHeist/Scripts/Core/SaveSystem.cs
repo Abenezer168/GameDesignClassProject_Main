@@ -108,6 +108,11 @@ namespace DataHeist
 
         public static int RankValue(string r) => "CBAS".IndexOf(r ?? "C", StringComparison.Ordinal);
 
+        /// <summary>Drops the cached save so the next access re-reads PlayerPrefs.</summary>
+        public static void Reload() => _data = null;
+
+        public const string PrefsKey = Key;
+
         public static void ResetAll()
         {
             _data = new SaveData();

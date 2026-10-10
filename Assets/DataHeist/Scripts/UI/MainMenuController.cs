@@ -10,7 +10,7 @@ namespace DataHeist
 {
     /// <summary>
     /// The Data Heist title screen, built entirely at runtime: living city backdrop, glitching
-    /// logo, PLAY / STORY / RUNNERS / SETTINGS / QUIT, wallet and best rank.
+    /// logo, PLAY / STORY / SHOP / OPTIONS / QUIT, wallet and best rank.
     /// It installs itself into MainMenuScreenScene (see MainMenuInstaller), so the team's scene
     /// file never has to be edited.
     /// </summary>
@@ -18,20 +18,26 @@ namespace DataHeist
     {
         struct Item { public string label, description; public Action action; }
 
+        /// <summary>Panel to open as soon as the home page appears ("options" or "shop").</summary>
+        public static string OpenOnStart;
+
         readonly List<Button> _buttons = new List<Button>();
         readonly List<string> _descriptions = new List<string>();
         TextMeshProUGUI _logo, _logoCyan, _logoPink, _desc;
         SettingsPanel _settings;
+        ShopPanel _shop;
+        MenuBackdrop _backdrop;
+        TextMeshProUGUI _walletText, _bestText;
         GameObject _menuRoot;
         float _glitchT = 2f, _glitchLeft;
         int _selected;
 
         void Start()
         {
-            var backdrop = MenuBackdrop.Create();
-            backdrop.runnerId = GameSession.SelectedCharacter;
-            backdrop.runnerScreenX = 0.74f;
-            backdrop.AddTower(0.66f);
+            _backdrop = MenuBackdrop.Create();
+            _backdrop.runnerId = GameSession.SelectedCharacter;
+            _backdrop.runnerScreenX = 0.74f;
+            _backdrop.AddTower(0.66f);
             BuildUI();
             ScreenFX.Add();
             AudioManager.I.Music("music_menu");
@@ -69,9 +75,9 @@ namespace DataHeist
             var items = new[]
             {
                 new Item { label = "PLAY", description = "Choose a runner and hit the rooftops.", action = Play },
-                new Item { label = "STORY", description = "How the crew ended up on the run.", action = Story },
-                new Item { label = "RUNNERS", description = "Meet the crew and recruit new runners with Data Bytes.", action = () => SceneFader.Load(DH.SceneCharacterSelect) },
-                new Item { label = "SETTINGS", description = "Audio, display and key bindings.", action = OpenSettings },
+                new Item { label = "STORY", description = "Watch the intro again: how the crew ended up on the run.", action = Story },
+                new Item { label = "SHOP", description = "Spend your Data Bytes to recruit and equip runners.", action = OpenShop },
+                new Item { label = "OPTIONS", description = "Volume, display and key bindings.", action = OpenSettings },
                 new Item { label = "QUIT", description = "Log off for the night.", action = Quit },
             };
             for (int i = 0; i < items.Length; i++)
@@ -99,22 +105,34 @@ namespace DataHeist
             // wallet / progress card
             var card = UIKit.Panel("Progress", menu, DH.Pink);
             card.rectTransform.Place(new Vector2(1, 1), new Vector2(1, 1), new Vector2(-16, -16), new Vector2(170, 46));
-            var data = SaveSystem.Data;
-            var rec = SaveSystem.GetRecord("level01");
-            var wallet = UIKit.Text("Wallet", card.rectTransform, $"<color=#2ff3ff>{data.bytes}</color> DATA BYTES", 7, DH.Ink);
-            wallet.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -10), new Vector2(150, 10));
-            var best = UIKit.Text("Best", card.rectTransform,
-                rec != null ? $"LEVEL 1 BEST  <color=#ffd23a>{rec.rank}</color>  {rec.score}" : "LEVEL 1  NOT CLEARED", 5, DH.Dim);
-            best.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -26), new Vector2(150, 10));
+            _walletText = UIKit.Text("Wallet", card.rectTransform, "", 7, DH.Ink);
+            _walletText.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -10), new Vector2(150, 10));
+            _bestText = UIKit.Text("Best", card.rectTransform, "", 5, DH.Dim);
+            _bestText.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -26), new Vector2(150, 10));
+            RefreshProgress();
 
             var hint = UIKit.Text("Hint", menu, "UP/DOWN  NAVIGATE      ENTER  SELECT", 5, new Color(1, 1, 1, 0.45f));
             hint.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(34, 16), new Vector2(300, 10));
 
             _settings = SettingsPanel.Create(root);
             _settings.OnClosed += () => { _menuRoot.SetActive(true); UIKit.Select(_buttons[3]); };
+            _shop = ShopPanel.Create(root);
+            _shop.OnClosed += () => { _menuRoot.SetActive(true); UIKit.Select(_buttons[2]); };
+            _shop.OnChanged += () => { RefreshProgress(); _backdrop.runnerId = GameSession.SelectedCharacter; };
 
             UIKit.Select(_buttons[0]);
             OnSelect(0);
+            var open = OpenOnStart;
+            OpenOnStart = null;
+            if (open == "options") { OnSelect(3); OpenSettings(); }
+            else if (open == "shop") { OnSelect(2); OpenShop(); }
+        }
+
+        void RefreshProgress()
+        {
+            var rec = SaveSystem.GetRecord("level01");
+            _walletText.text = $"<color=#2ff3ff>{SaveSystem.Data.bytes}</color> DATA BYTES";
+            _bestText.text = rec != null ? $"LEVEL 1 BEST  <color=#ffd23a>{rec.rank}</color>  {rec.score}" : "LEVEL 1  NOT CLEARED";
         }
 
         TextMeshProUGUI LogoLayer(RectTransform parent, Color c, Vector2 offset)
@@ -185,11 +203,7 @@ namespace DataHeist
         }
 
         // ------------------------------------------------------------------ actions
-        void Play()
-        {
-            bool storyFirst = !SaveSystem.Data.storySeen && Application.CanStreamedLevelBeLoaded(DH.SceneStory);
-            SceneFader.Load(storyFirst ? DH.SceneStory : DH.SceneCharacterSelect);
-        }
+        static void Play() => SceneFader.Load(DH.SceneCharacterSelect);
 
         void Story()
         {
@@ -205,6 +219,12 @@ namespace DataHeist
         {
             _menuRoot.SetActive(false);
             _settings.Open();
+        }
+
+        void OpenShop()
+        {
+            _menuRoot.SetActive(false);
+            _shop.Open();
         }
 
         static void Quit()
@@ -261,6 +281,8 @@ namespace DataHeist
     /// <summary>
     /// Puts the Data Heist title screen into MainMenuScreenScene at load time: the team's old
     /// canvas and its manager are switched off (not deleted), so the scene file stays untouched.
+    /// Until the player has seen the story intro, the home page hands over to StoryScene first;
+    /// the intro returns here when it ends or is skipped.
     /// </summary>
     static class MainMenuInstaller
     {
@@ -275,11 +297,31 @@ namespace DataHeist
 
         static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
+            // the team's old screens now live inside the title screen: route them there
+            switch (scene.name)
+            {
+                case "OptionsScreenScene": Reroute(scene, DH.SceneMainMenu, "options"); return;
+                case "ShopScreenScene": Reroute(scene, DH.SceneMainMenu, "shop"); return;
+                case "GameScreenScene": Reroute(scene, DH.SceneCharacterSelect, null); return;
+                case "GameOverScreenScene": Reroute(scene, DH.SceneMainMenu, null); return;
+            }
             if (scene.name != DH.SceneMainMenu) return;
             if (UnityEngine.Object.FindAnyObjectByType<MainMenuController>() != null) return;
             foreach (var go in scene.GetRootGameObjects())
                 if (Array.IndexOf(LegacyRoots, go.name) >= 0) go.SetActive(false);
+            if (!SaveSystem.Data.storySeen && Application.CanStreamedLevelBeLoaded(DH.SceneStory))
+            {
+                SceneManager.LoadScene(DH.SceneStory);
+                return;
+            }
             new GameObject("DataHeist Main Menu").AddComponent<MainMenuController>();
+        }
+
+        static void Reroute(Scene from, string to, string openPanel)
+        {
+            foreach (var go in from.GetRootGameObjects()) go.SetActive(false);
+            MainMenuController.OpenOnStart = openPanel;
+            SceneManager.LoadScene(to);
         }
     }
 }
