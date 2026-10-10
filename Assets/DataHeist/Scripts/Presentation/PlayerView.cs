@@ -59,6 +59,8 @@ namespace DataHeist
                 if (p.vy > -3) return Frame("jump", 1);
                 return Frame("fall", Mathf.FloorToInt(now / 0.12f) % 2);
             }
+            // feet planted (the Guardian's arena): stand ready instead of running in place
+            if (_sim.SpeedNow() <= 0f) return Frame("idle", Mathf.FloorToInt(now / 0.2f) % 4);
             return Frame("run", Mathf.FloorToInt(_runDist / 0.42f) % 8);
         }
 

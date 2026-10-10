@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using UnityEditor;
+using UnityEngine;
 using Debug = UnityEngine.Debug;
 
 namespace DataHeist.EditorTools
@@ -60,7 +61,8 @@ namespace DataHeist.EditorTools
                         if (ok) next.Add((s, new Path { act = ai, prev = node.path, effort = (node.path?.effort ?? 0) + (natural ? Effort[ai] : 0) }));
                     }
                 }
-                if (next.Count == 0)
+                // no zero-hit route left, or stuck (e.g. a boss it can't damage) far past par time
+                if (next.Count == 0 || beam[0].sim.time > level.parTime * 3f)
                     return new Result { character = ch.id, cleared = false, failX = beam[0].sim.p.x, time = beam[0].sim.time };
                 var won = next.Find(n => n.sim.state == SimState.Won);
                 if (won.sim != null)
@@ -79,7 +81,8 @@ namespace DataHeist.EditorTools
                 foreach (var n in next)
                 {
                     var p = n.sim.p;
-                    string key = $"{p.x:F1}|{p.y:F1}|{p.vy:F0}|{p.sliding}|{p.attackCD > 0}|{n.sim.stats.bytes}";
+                    var boss = n.sim.Boss;
+                    string key = $"{p.x:F1}|{p.y:F1}|{p.vy:F0}|{p.sliding}|{p.attackCD > 0}|{n.sim.stats.bytes}|{n.sim.stats.fragments}|{(boss != null ? boss.hp : 0)}|{ReflectedInFlight(n.sim)}";
                     if (!seen.Add(key)) continue;
                     beam.Add(n);
                     if (beam.Count >= Beam) break;
@@ -90,8 +93,23 @@ namespace DataHeist.EditorTools
         static bool _natural;
 
         // natural runs also take drones down, so the demo shows every verb of the game
-        static float Score((RunnerSim sim, Path path) n) =>
-            n.sim.stats.bytes * 3 + n.sim.p.x - (n.path?.effort ?? 0) + (_natural ? n.sim.stats.drones * 4 : 0);
+        // progress = distance + bytes; data fragments and damage on the Guardian count as big progress
+        // (in the boss arena the runner stands still, so distance alone can't guide the search)
+        static float Score((RunnerSim sim, Path path) n)
+        {
+            var s = n.sim;
+            var boss = s.Boss;
+            float bossDamage = boss != null ? RunnerSim.BossMaxHp - Mathf.Max(0, boss.hp) : 0;
+            return s.stats.bytes * 3 + s.p.x - (n.path?.effort ?? 0) + (_natural ? s.stats.drones * 4 : 0)
+                   + s.stats.fragments * 60 + bossDamage * 80 + ReflectedInFlight(s) * 40;
+        }
+
+        static int ReflectedInFlight(RunnerSim s)
+        {
+            int n = 0;
+            foreach (var b in s.bolts) if (b.reflected && b.alive) n++;
+            return n;
+        }
 
         /// <summary>Replays a route and counts what it survived, proving the hazards really engage.</summary>
         static string HazardReport(LevelData level, CharacterDefinition ch, string route)
@@ -111,6 +129,8 @@ namespace DataHeist.EditorTools
                 (SimEventType.SniperShot, "sniper shots"), (SimEventType.TurretShot, "turret shots"), (SimEventType.Shoot, "drone bolts"),
                 (SimEventType.Deflect, "slashed back"), (SimEventType.SignFall, "falling loads"), (SimEventType.SignSmash, "smashed"),
                 (SimEventType.ShockOn, "live-floor pulses"), (SimEventType.LaserOn, "laser switch-ons"), (SimEventType.PressSlam, "press slams"),
+                (SimEventType.Fragment, "data fragments"), (SimEventType.BossFire, "Guardian attacks"), (SimEventType.BossHit, "hits on the Guardian"),
+                (SimEventType.BossDefeated, "Guardian defeated"), (SimEventType.Lockdown, "lockdown escape"),
             })
                 if (counts.TryGetValue(type, out var n) && n > 0) parts.Add($"{n} {label}");
             return parts.Count == 0 ? "" : " | survived " + string.Join(", ", parts);

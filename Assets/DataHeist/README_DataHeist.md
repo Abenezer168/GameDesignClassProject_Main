@@ -14,7 +14,7 @@ Everything for Level 1 "Neon Rooftops", the four playable runners and the full g
    - Shortcut: **Data Heist > Play Level 1**.
    - Debug commands: **Data Heist > Debug > Unlock All Runners + 1000 Bytes** and **Reset Save Data**.
 4. After editing a level, run **Data Heist > Validate Level 1 / Level 2 (Playtest Bot)**. It proves every runner can still finish with zero hits.
-5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It plays through the title screen, Settings, every story shot, Character Select and Level 1, and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
+5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It runs **muted** (Unity's master mute), so nothing plays through your speakers while it races through the game. It plays through the title screen, Settings, every story shot, Character Select and Level 1, and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
 
 ## Title screen and settings
 
@@ -139,6 +139,36 @@ There are 217 Data Bytes, 2 repair kits, 2 checkpoints, 6 snipers, 7 live floors
 **Validation:** run **Data Heist > Validate Level 2 (Playtest Bot)**. It proves every runner can clear the level with zero hits and no abilities, and reports what each route survived. Currently every run survives all 6 sniper shots, all 5 falling signs and 14 live-floor pulses, so the hazards really engage. Headless, `PlaytestBot.ValidateAllBatch` checks every level and exits 0 or 1.
 
 **To add a level:** copy `gen_level02.py`, add the level to `LevelCatalog`, create its scene (copy `CreateLevel02Scene`), add a `music_<levelId>` track, then run the bot.
+
+## Level 3: "The Underground Data Vault" (702 m, the final mission)
+
+Level 3 unlocks when Level 2 is cleared (NEXT LEVEL on Level 2's results, or the mission picker). It is authored by `gen_level03.py`, the art comes from `gen_level3_art.py`, and the scene is `Level03_UndergroundVault`. It uses the `vault` theme: a server-hall back wall and three parallax layers, a ceiling band, drifting dust and spark showers, animated screens and server LEDs, security cameras and rotating beacons. The music is "Dark City" for the infiltration, "Boss Fight 2" for the Guardian and "Die Hard Battle" for the escape.
+
+**New hazards** (all triggered by distance, so a retry plays out the same way):
+
+| Hazard | How it works | How to beat it |
+|---|---|---|
+| Security turret (`turret`) | Wakes at 16 m and shows a red warning line for 0.7 s, then fires at chest height or, in `low` mode, at the ankles | Chest shots: slide or jump. Ankle shots: jump. Either: slash |
+| Laser barrier (`low_cycle` / `high_cycle`) | Off, then a flickering warning, then on (2 s cycle) | Low beams: jump. High beams: slide |
+| Live floor (`shock`, mode `warn`) | Crackles amber for 0.4 s before every live phase | Jump it, or cross while it is off. EMP shorts it out |
+| Falling machinery (`sign`, kind `machine`) | A red marker on the floor, then the load shakes and drops | Jump the wreck, or slash it |
+| Crusher (`press`) | Up, a shudder warning, then it slams down to 0.6 m and rises again; the hazard stripes mark the plate | Slide under it while it's down, or pass while it's up |
+| Security drones (`gunner`, move `patrol`) | Sweep back and forth with the usual warning line and bolts | Slash, stomp or dodge |
+
+**Data fragments.** There are 3 fragments on the main path, shown in the HUD under DATA. The vault door (`vault`) opens only with all three. If you reach it without them, the run fails with "the vault stayed sealed", and **retry respawns you at the last checkpoint before the first fragment you missed**, so a run can never soft-lock.
+
+**The Corporate Security Guardian** (`boss`, arena line in `w`):
+- At the arena line the runner holds position with feet planted. Jump, slide and attack work exactly as normal.
+- The Guardian cycles three attacks: **laser** (a red sight line, then a chest-height bolt), **orb volley** (low, chest, low), and **ground slam** (a red floor warning, then a shockwave you must jump).
+- **The only way to hurt it is to slash its lasers and orbs back into it** (parry). It has 9 health in 3 phases; each phase shortens the warnings and speeds up the shots.
+- It has a health bar, a hit flash, an enrage message and a death sequence. When it falls, the run resumes and you grab the **evidence**.
+
+**Lockdown escape.**
+- Picking up the evidence starts a 34 s countdown with red alarm lighting, the escape track, and an escape progress bar under the timer.
+- **Every hit costs 3 seconds.** If the timer runs out, the run fails ("the facility locked down"), and retrying from the escape checkpoint resets the timer.
+- Reaching the exit completes the campaign and saves the **Guardian of the City** award (`SaveData.guardianAward`), the fragments and the run stats (`totalDeaths`, `totalPlayTime`).
+
+**Validation:** **Data Heist > Validate Level 3 (Playtest Bot)**. Every runner clears it with zero hits and no abilities. Each run collects all 3 fragments, slashes back the 9 shots that destroy the Guardian, and finishes the escape. The bot reports the turret shots, laser cycles, press slams and Guardian attacks it survived.
 
 ## Audio
 

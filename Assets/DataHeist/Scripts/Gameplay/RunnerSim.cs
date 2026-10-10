@@ -19,7 +19,8 @@ namespace DataHeist
         // Level 2 hazards
         SniperAim, SniperShot, ShockOn, SignShake, SignFall, SignLand, SignSmash,
         // Level 3
-        TurretAim, TurretShot, LaserOn, PressWarn, PressSlam
+        TurretAim, TurretShot, LaserOn, PressWarn, PressSlam,
+        Fragment, VaultOpen, BossStart, BossTelegraph, BossFire, BossHit, BossPhase, BossDefeated, Evidence, Lockdown
     }
 
     public struct SimEvent
@@ -37,6 +38,7 @@ namespace DataHeist
         public float x, y, ox, oy, baseY, h, cd, phase;
         public float w, aimY, vy;   // Level 2: shock width, sniper aim height, falling-sign speed
         public int st;              // Level 2 state machine (sniper / shock / sign)
+        public int hp, step;        // Level 3 boss: health and position in its attack pattern
         public bool alive = true;
         public SimEntity Clone() => (SimEntity)MemberwiseClone();
     }
@@ -46,6 +48,8 @@ namespace DataHeist
         public float x, y, vx;
         public bool alive = true;
         public bool sniper;         // sniper tracer: faster, longer, drawn red
+        public int kind;            // 0 bolt, 2 boss laser bolt, 3 boss orb, 4 shockwave (ground, can't be slashed)
+        public bool reflected;      // slashed back toward the boss
     }
 
     public class SimPlayer
@@ -58,8 +62,8 @@ namespace DataHeist
 
     public class SimStats
     {
-        public int bytes, hits, deaths, drones;
-        public bool shard;
+        public int bytes, hits, deaths, drones, fragments;
+        public bool shard, evidence;
         public SimStats Clone() => (SimStats)MemberwiseClone();
     }
 
@@ -81,6 +85,11 @@ namespace DataHeist
         public SimState state = SimState.Running;
         public float time, empT, magnetT, checkpointX;
         public int totalBytes;
+        // Level 3: data fragments, the boss and the lockdown escape
+        public int totalFragments;
+        public float escapeT;          // seconds left before the facility locks down (while escaping)
+        public bool escaping;
+        string lastDeath;
         int cpDrones;
 
         public RunnerSim(LevelData level, CharacterDefinition character)
@@ -102,6 +111,8 @@ namespace DataHeist
             {
                 ents[i].id = i;
                 if (ents[i].t == "byte") totalBytes++;
+                if (ents[i].t == "fragment") totalFragments++;
+                if (ents[i].t == "boss") ents[i].hp = BossMaxHp;
             }
             checkpointX = level.spawnX;
             Spawn(level.spawnX);
@@ -112,7 +123,8 @@ namespace DataHeist
             L = o.L; P = o.P; ch = o.ch;
             ents = new SimEntity[o.ents.Length];
             for (int i = 0; i < ents.Length; i++) ents[i] = o.ents[i].Clone();
-            foreach (var b in o.bolts) bolts.Add(new SimBolt { x = b.x, y = b.y, vx = b.vx, alive = b.alive, sniper = b.sniper });
+            foreach (var b in o.bolts) bolts.Add(new SimBolt { x = b.x, y = b.y, vx = b.vx, alive = b.alive, sniper = b.sniper, kind = b.kind, reflected = b.reflected });
+            totalFragments = o.totalFragments; escapeT = o.escapeT; escaping = o.escaping; lastDeath = o.lastDeath;
             p = o.p.Clone(); stats = o.stats.Clone(); state = o.state;
             time = o.time; empT = o.empT; magnetT = o.magnetT; checkpointX = o.checkpointX;
             totalBytes = o.totalBytes; cpDrones = o.cpDrones;
@@ -145,8 +157,22 @@ namespace DataHeist
             }
         }
 
+        /// <summary>The boss whose arena the runner is standing in (the run pauses until it falls), or null.</summary>
+        public SimEntity ArenaBoss
+        {
+            get
+            {
+                foreach (var e in ents)
+                    if (e.t == "boss" && e.st >= BossFighting && e.st < BossDown) return e;
+                return null;
+            }
+        }
+
+        public SimEntity Boss { get { foreach (var e in ents) if (e.t == "boss") return e; return null; } }
+
         public float SpeedNow()
         {
+            if (ArenaBoss != null) return 0f;     // feet planted: jump, slide and slash still work
             float s = P.runSpeed * ch.speedMultiplier;
             foreach (var z in L.zones) if (p.x >= z.x0 && p.x <= z.x1) s *= z.speed;
             if (p.dashT > 0) s *= 2.6f;
@@ -272,6 +298,11 @@ namespace DataHeist
             UpdateEntities(dt);
             Collide();
 
+            if (escaping && state == SimState.Running)
+            {
+                escapeT -= dt;
+                if (escapeT <= 0) { escapeT = 0; Die("lockdown"); }
+            }
             if (p.y < L.killY) Die("fall");
             if (p.x >= L.exitX && state == SimState.Running)
             {
@@ -361,6 +392,9 @@ namespace DataHeist
                 case "byte": return Rect.MinMaxRect(e.x - 0.3f, e.y - 0.3f, e.x + 0.3f, e.y + 0.3f);
                 case "repair": return Rect.MinMaxRect(e.x - 0.35f, e.y - 0.35f, e.x + 0.35f, e.y + 0.35f);
                 case "shard": return Rect.MinMaxRect(e.x - 0.5f, e.y - 0.7f, e.x + 0.5f, e.y + 0.7f);
+                case "fragment": return Rect.MinMaxRect(e.x - 0.4f, e.y - 0.4f, e.x + 0.4f, e.y + 0.4f);
+                case "evidence": return Rect.MinMaxRect(e.x - 0.5f, e.y - 0.5f, e.x + 0.5f, e.y + 0.5f);
+                case "vault": return Rect.MinMaxRect(e.x - 0.6f, e.y, e.x + 0.6f, e.y + 3f);
                 case "shock": return Rect.MinMaxRect(e.x, e.y, e.x + e.w, e.y + 0.15f);
                 case "press":
                 {
@@ -376,7 +410,8 @@ namespace DataHeist
         }
 
         static bool HasBox(SimEntity e) =>
-            e.t != "checkpoint" && e.t != "exit" && e.t != "sniper" && e.t != "turret" && !(e.t == "sign" && e.st < SignFalling);
+            e.t != "checkpoint" && e.t != "exit" && e.t != "sniper" && e.t != "turret" && e.t != "boss"
+            && !(e.t == "sign" && e.st < SignFalling);
 
         // ------------------------------------------------------------------ Level 2 hazards
         // Every hazard is triggered by the runner's distance, never by the clock, so a run (and a
@@ -591,6 +626,12 @@ namespace DataHeist
                 }
                 if (e.t == "sniper" || e.t == "shock" || e.t == "sign") UpdateLevel2(e, dt);
                 if (e.t == "turret" || e.t == "press" || (e.t == "laser" && IsCycling(e))) UpdateLevel3(e, dt);
+                if (e.t == "boss") UpdateBoss(e, dt);
+                if (e.t == "vault" && e.st == 0 && e.x - p.x < 6f && stats.fragments >= totalFragments)
+                {
+                    e.st = 1;
+                    Emit(SimEventType.VaultOpen, e.x, e.y + 1.5f);
+                }
                 if (e.t == "byte" && magnetT > 0)
                 {
                     float dx = p.x - e.x, dy = (p.y + 0.6f) - e.y, d = Mathf.Sqrt(dx * dx + dy * dy);
@@ -602,7 +643,7 @@ namespace DataHeist
                 }
             }
             foreach (var b in bolts) b.x += b.vx * dt;
-            bolts.RemoveAll(b => !b.alive || b.x < p.x - 20f);
+            bolts.RemoveAll(b => !b.alive || b.x < p.x - 20f || b.x > p.x + 30f);
         }
 
         void Collide()
@@ -643,6 +684,25 @@ namespace DataHeist
                         break;
                     case "shard":
                         if (touching) { e.alive = false; stats.shard = true; Emit(SimEventType.Shard, e.x, e.y); }
+                        break;
+                    case "fragment":
+                        if (touching)
+                        {
+                            e.alive = false; stats.fragments++;
+                            Emit(SimEventType.Fragment, e.x, e.y, null, stats.fragments >= totalFragments);
+                        }
+                        break;
+                    case "evidence":
+                        if (touching)
+                        {
+                            e.alive = false; stats.evidence = true;
+                            escaping = true; escapeT = EscapeTime;
+                            Emit(SimEventType.Evidence, e.x, e.y);
+                            Emit(SimEventType.Lockdown, e.x, e.y);
+                        }
+                        break;
+                    case "vault":
+                        if (e.st == 0 && touching) Die("vault");
                         break;
                     case "pad":
                         if (touching && p.vy <= 0 && !dashing)
@@ -699,12 +759,27 @@ namespace DataHeist
             foreach (var bo in bolts)
             {
                 if (!bo.alive) continue;
-                var bb = bo.sniper
-                    ? Rect.MinMaxRect(bo.x - 0.4f, bo.y - 0.12f, bo.x + 0.4f, bo.y + 0.12f)
-                    : Rect.MinMaxRect(bo.x - 0.25f, bo.y - 0.12f, bo.x + 0.25f, bo.y + 0.12f);
-                if (atk && Overlap(ax0, ay0, ax1, ay1, bb))
+                var bb = BoltBox(bo);
+                if (bo.reflected)
                 {
-                    bo.alive = false; Emit(SimEventType.Deflect, bo.x, bo.y); continue;
+                    // slashed back: it can only hit the boss now
+                    var boss = Boss;
+                    if (boss != null && boss.hp > 0 && boss.st >= BossFighting && boss.st < BossDown && Overlap(bb.xMin, bb.yMin, bb.xMax, bb.yMax, BossBox(boss)))
+                    {
+                        bo.alive = false;
+                        HitBoss(boss, bo);
+                    }
+                    continue;
+                }
+                if (atk && bo.kind != 4 && Overlap(ax0, ay0, ax1, ay1, bb))
+                {
+                    if (bo.kind == 2 || bo.kind == 3)
+                    {
+                        bo.reflected = true; bo.vx = BossReflectSpeed;     // parry it back at the Guardian
+                        Emit(SimEventType.Deflect, bo.x, bo.y, "reflect");
+                    }
+                    else { bo.alive = false; Emit(SimEventType.Deflect, bo.x, bo.y); }
+                    continue;
                 }
                 if (Overlap(px0, py0, px1, py1, bb))
                 {
@@ -724,7 +799,9 @@ namespace DataHeist
         {
             if (p.inv > 0 || state != SimState.Running) return;
             p.hp -= 1; p.inv = 1.25f; p.hurtT = 0.35f; stats.hits++;
-            Emit(SimEventType.Hurt, p.x, p.y);
+            // during the lockdown escape every hit also costs time
+            if (escaping) escapeT = Mathf.Max(0, escapeT - EscapeHitPenalty);
+            Emit(SimEventType.Hurt, p.x, p.y, escaping ? "time" : null);
             if (p.hp <= 0) Die("hp");
         }
 
@@ -732,22 +809,41 @@ namespace DataHeist
         {
             if (state != SimState.Running) return;
             state = SimState.Dead; stats.deaths++;
+            lastDeath = cause;
             Emit(SimEventType.Dead, p.x, p.y, cause);
         }
 
         /// <summary>Restores everything past the last checkpoint and respawns there.</summary>
         public void Respawn()
         {
+            // the vault needs every fragment: go back to the last checkpoint before the first one missed
+            if (lastDeath == "vault")
+            {
+                float missed = float.MaxValue;
+                foreach (var e in ents) if (e.t == "fragment" && e.alive) missed = Mathf.Min(missed, e.ox);
+                float back = L.spawnX;
+                foreach (var e in ents) if (e.t == "checkpoint" && e.ox < missed) back = Mathf.Max(back, e.ox);
+                checkpointX = Mathf.Min(checkpointX, back);
+            }
             float cx = checkpointX;
             foreach (var e in ents)
             {
                 if (e.t == "checkpoint" || e.ox <= cx + 0.01f) continue;
                 e.x = e.ox; e.y = e.oy; e.alive = true; e.cd = 0.8f;
-                e.st = 0; e.vy = 0;
+                e.st = 0; e.vy = 0; e.step = 0;
+                if (e.t == "boss") e.hp = BossMaxHp;
             }
             int collected = 0;
             foreach (var e in ents) if (e.t == "byte" && !e.alive) collected++;
             stats.bytes = collected;
+            int frags = 0;
+            foreach (var e in ents) if (e.t == "fragment" && !e.alive) frags++;
+            stats.fragments = frags;
+            bool evidenceTaken = false;
+            foreach (var e in ents) if (e.t == "evidence" && !e.alive) evidenceTaken = true;
+            stats.evidence = evidenceTaken;
+            escaping = evidenceTaken;
+            escapeT = evidenceTaken ? EscapeTime : 0;
             stats.drones = cpDrones;
             stats.shard = false;
             bolts.Clear(); empT = 0; magnetT = 0;
@@ -755,6 +851,118 @@ namespace DataHeist
             Spawn(cx);
             p.inv = 1f;
             Emit(SimEventType.Respawn, cx, p.y);
+        }
+
+        // ------------------------------------------------------------------ Level 3 boss
+        // The Corporate Security Guardian. The runner stops at the arena line (e.w) and holds position;
+        // the Guardian cycles LASER -> ORB VOLLEY -> GROUND SLAM. Laser bolts and orbs can be slashed
+        // back into it (that is the only way to hurt it); shockwaves must be jumped. Every 3 hits
+        // it enters a faster phase. All timing runs from the moment the fight starts, so it is
+        // deterministic and the playtest bot can prove it beatable.
+        public const int BossMaxHp = 9;
+        public const int BossIdle = 0, BossFighting = 1, BossDown = 9;
+        public const float BossReflectSpeed = 20f, EscapeTime = 34f, EscapeHitPenalty = 3f;
+        const int AtkLaser = 0, AtkOrbs = 1, AtkSlam = 2;
+
+        public static int BossPhase(SimEntity b) => b.hp > 6 ? 1 : b.hp > 3 ? 2 : 3;
+        static float BossPace(SimEntity b) => BossPhase(b) == 1 ? 1f : BossPhase(b) == 2 ? 1.2f : 1.4f;
+
+        /// <summary>Hit box of the Guardian's body (4 units wide, 4 tall, standing on the floor).</summary>
+        public static Rect BossBox(SimEntity b) => Rect.MinMaxRect(b.x - 1.6f, b.y, b.x + 1.6f, b.y + 4f);
+
+        public static Rect BoltBox(SimBolt b) =>
+            b.kind == 4 ? Rect.MinMaxRect(b.x - 0.45f, b.y, b.x + 0.45f, b.y + 0.6f)
+            : b.kind == 3 ? Rect.MinMaxRect(b.x - 0.22f, b.y - 0.22f, b.x + 0.22f, b.y + 0.22f)
+            : b.sniper || b.kind == 2 ? Rect.MinMaxRect(b.x - 0.4f, b.y - 0.12f, b.x + 0.4f, b.y + 0.12f)
+            : Rect.MinMaxRect(b.x - 0.25f, b.y - 0.12f, b.x + 0.25f, b.y + 0.12f);
+
+        /// <summary>What the Guardian is doing now: 0 laser aim, 1 orb charge, 2 slam wind-up, -1 recovering.</summary>
+        public static int BossTelegraphing(SimEntity b) => b.st == 2 ? b.step % 3 : -1;
+
+        /// <summary>Seconds left in the current telegraph (drives the warning visuals).</summary>
+        public static float BossTelegraphLeft(SimEntity b) => b.st == 2 ? b.cd : 0;
+
+        void UpdateBoss(SimEntity e, float dt)
+        {
+            float pace = BossPace(e);
+            switch (e.st)
+            {
+                case BossIdle:
+                    if (p.x >= e.w - 0.01f)
+                    {
+                        e.st = 2; e.step = 0; e.cd = 1.4f;           // first attack after a short stare-down
+                        p.x = e.w; p.vy = Mathf.Min(p.vy, 0);
+                        Emit(SimEventType.BossStart, e.x, e.y);
+                        Emit(SimEventType.BossTelegraph, e.x, e.y, "laser");
+                    }
+                    break;
+                case 2:   // telegraph of the current attack
+                    e.cd -= dt;
+                    if (e.cd > 0) break;
+                    int atk = e.step % 3;
+                    if (atk == AtkLaser)
+                    {
+                        bolts.Add(new SimBolt { x = e.x - 1.8f, y = GroundAt(p.x) + 0.8f, vx = -18f * pace, kind = 2 });
+                        Emit(SimEventType.BossFire, e.x - 1.8f, GroundAt(p.x) + 0.8f, "laser");
+                        e.st = 3; e.cd = 0.9f;
+                    }
+                    else if (atk == AtkOrbs)
+                    {
+                        e.st = 4; e.vy = 0; e.cd = 0;                // vy counts orbs fired
+                    }
+                    else
+                    {
+                        bolts.Add(new SimBolt { x = e.x - 1.8f, y = e.y, vx = -10f * pace, kind = 4 });
+                        Emit(SimEventType.BossFire, e.x - 1.8f, e.y, "slam");
+                        e.st = 3; e.cd = 1.1f;
+                    }
+                    break;
+                case 4:   // orb volley: low, chest, low
+                    e.cd -= dt;
+                    if (e.cd <= 0)
+                    {
+                        int n = (int)e.vy;
+                        float h = n % 2 == 0 ? 0.3f : 0.8f;
+                        bolts.Add(new SimBolt { x = e.x - 1.8f, y = GroundAt(p.x) + h, vx = -9f * pace, kind = 3 });
+                        Emit(SimEventType.BossFire, e.x - 1.8f, GroundAt(p.x) + h, "orb");
+                        e.vy = n + 1;
+                        e.cd = 0.65f / pace;
+                        if (e.vy >= 3) { e.st = 3; e.cd = 1.2f; }
+                    }
+                    break;
+                case 3:   // recovery, then the next attack's telegraph
+                    e.cd -= dt;
+                    if (e.cd <= 0)
+                    {
+                        e.step++;
+                        e.st = 2;
+                        int next = e.step % 3;
+                        e.cd = (next == AtkLaser ? 1.0f : next == AtkOrbs ? 0.7f : 0.85f) / pace;
+                        Emit(SimEventType.BossTelegraph, e.x, e.y, next == AtkLaser ? "laser" : next == AtkOrbs ? "orbs" : "slam");
+                    }
+                    break;
+                case 5:   // defeated: falls apart, then the way opens
+                    e.cd -= dt;
+                    if (e.cd <= 0) e.st = BossDown;
+                    break;
+            }
+        }
+
+        void HitBoss(SimEntity e, SimBolt b)
+        {
+            int phase = BossPhase(e);
+            e.hp--;
+            Emit(SimEventType.BossHit, b.x, b.y, null, e.hp <= 0);
+            if (e.hp <= 0)
+            {
+                e.st = 5; e.cd = 2.0f;
+                // the arena goes quiet (flag them; HitBoss runs inside the bolt loop, so no removing here)
+                foreach (var o in bolts) if (!o.reflected) o.alive = false;
+                stats.drones++;
+                Emit(SimEventType.BossDefeated, e.x, e.y + 2f);
+                return;
+            }
+            if (BossPhase(e) != phase) Emit(SimEventType.BossPhase, e.x, e.y + 2f, BossPhase(e).ToString());
         }
 
         // ------------------------------------------------------------------ results
@@ -771,6 +979,7 @@ namespace DataHeist
         {
             int timeBonus = Mathf.Max(0, Mathf.RoundToInt((L.parTime * 1.3f - time) * 20f));
             return stats.bytes * 10 + (stats.shard ? 500 : 0) + stats.drones * 25 + timeBonus
+                   + stats.fragments * 150 + (stats.evidence ? 1000 : 0)
                    + (stats.hits == 0 ? 300 : 0) - stats.deaths * 100;
         }
     }

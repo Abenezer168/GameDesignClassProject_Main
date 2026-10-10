@@ -12,6 +12,7 @@ namespace DataHeist
         public string rank;
         public float time;
         public int bytes;
+        public int fragments;               // Level 3 data fragments on the best run
     }
 
     [Serializable]
@@ -30,6 +31,10 @@ namespace DataHeist
         public bool fullscreen = true;
         public bool vsync = true;
         public bool storySeen;
+        // campaign progress for the ending and the completion screen
+        public bool guardianAward;          // set when the final mission (Level 3) is completed
+        public int totalDeaths;             // every failed attempt, all levels
+        public float totalPlayTime;         // seconds spent in runs, all levels
     }
 
     /// <summary>PlayerPrefs-backed JSON save. One global instance; call Save() after changes.</summary>
@@ -102,6 +107,7 @@ namespace DataHeist
             if (best == null) { Data.records.Add(run); return true; }
             bool better = run.score > best.score;
             if (better) { best.score = run.score; best.time = run.time; best.bytes = run.bytes; }
+            best.fragments = Mathf.Max(best.fragments, run.fragments);
             if (RankValue(run.rank) > RankValue(best.rank)) best.rank = run.rank;
             return better;
         }

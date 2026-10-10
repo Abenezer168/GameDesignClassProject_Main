@@ -81,6 +81,14 @@ SFX = {
     'laser_on':    [L('scifi', 'forceField_003', 0.8, slice=(0.0, 0.3))],
     'press_warn':  [L('scifi', 'engineCircular_000', 0.7, 0.0, slice=(0.0, 0.35)), L('ui', 'error_008', 0.4)],
     'press_slam':  [L('impact', 'impactPlate_heavy_002'), L('scifi', 'lowFrequency_explosion_001', 0.7), L('impact', 'impactMetal_heavy_001', 0.6)],
+    # Level 3: data, vault, Guardian
+    'fragment':    [L('digital', 'powerUp3', 0.9), L('ui', 'confirmation_004', 0.5, 0.1)],
+    'vault_open':  [L('scifi', 'doorOpen_000'), L('digital', 'threeTone2', 0.5, 0.2)],
+    'boss_roar':   [L('scifi', 'spaceEngineLarge_000', 0.9, 0.0, slice=(0.0, 1.2), pitch=0.6), L('scifi', 'lowFrequency_explosion_000', 0.6)],
+    'boss_charge': [L('digital', 'phaserUp7', 0.7, pitch=0.5), L('scifi', 'forceField_004', 0.6)],
+    'boss_orb':    [L('digital', 'zap2', 0.8), L('scifi', 'laserSmall_003', 0.4)],
+    'boss_hit':    [L('impact', 'impactMetal_heavy_003'), L('scifi', 'explosionCrunch_001', 0.7, 0.0, slice=(0.0, 0.35)), L('ui', 'glitch_001', 0.6)],
+    'boss_explode': [L('scifi', 'explosionCrunch_004'), L('scifi', 'lowFrequency_explosion_000', 0.9)],
     # pickups and level objects
     'byte':        [L('digital', 'pepSound3', 0.9)],
     'repair':      [L('digital', 'powerUp11')],

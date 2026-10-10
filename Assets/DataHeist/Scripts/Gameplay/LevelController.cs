@@ -23,6 +23,17 @@ namespace DataHeist
 
         string LevelMusic => "music_" + levelId;
 
+        // the track this moment should have (null = deliberate silence); Update keeps the music on it,
+        // so a crossfade interrupted by a scene change can never leave a level silent
+        string _musicWanted;
+
+        void WantMusic(string track, bool restart = false)
+        {
+            _musicWanted = track;
+            if (track == null) AudioManager.I.StopMusic();
+            else AudioManager.I.Music(track, restart);
+        }
+
         LevelData _level;
         CharacterDefinition _ch;
         RunnerInput _input;
@@ -117,7 +128,8 @@ namespace DataHeist
                     else if (c <= 0)
                     {
                         AudioManager.I.Sfx("go", 0.7f);
-                        if (AudioManager.I.CurrentMusic != LevelMusic) AudioManager.I.Music(LevelMusic, true);
+                        if (AudioManager.I.CurrentMusic != LevelMusic) WantMusic(LevelMusic, true);
+                        else _musicWanted = LevelMusic;
                     }
                 }
                 _hud.SetCountdown(_countdown, Sim.stats.deaths == 0, _level);
@@ -125,6 +137,8 @@ namespace DataHeist
                 return;
             }
             _hud.SetCountdown(0, false, _level);
+            if (_musicWanted != null && !_endShown && Sim.state == SimState.Running && AudioManager.I.CurrentMusic != _musicWanted)
+                AudioManager.I.Music(_musicWanted);
 
             if (_hitStop > 0) { _hitStop -= dt; return; }
 
@@ -156,7 +170,7 @@ namespace DataHeist
             // keep Unity's Time in step with the glitch so particles/animators slow too
             Time.timeScale = scale;
 
-            bool alarm = Sim.InAlarmZone;
+            bool alarm = Sim.InAlarmZone || Sim.escaping;
             if (alarm && !_alarmOn) AudioManager.I.Sfx("alarm", 0.6f);
             _alarmOn = alarm;
             _hud.Alarm = alarm;
@@ -222,7 +236,7 @@ namespace DataHeist
                     case SimEventType.Hurt:
                         a.Sfx("hurt", 1f);
                         _cam.Shake(0.35f); _hitStop = 0.08f; _hud.Flash(0.18f);
-                        _fx.FloatText(new Vector2(p.x, p.y + 1.6f), "-1", DH.Red);
+                        _fx.FloatText(new Vector2(p.x, p.y + 1.6f), ev.info == "time" ? "-1   -3s" : "-1", DH.Red);
                         break;
                     case SimEventType.Dead:
                         a.Sfx("game_over", 1f);
@@ -249,9 +263,66 @@ namespace DataHeist
                         break;
                     case SimEventType.Respawn:
                         _countdown = 1.6f; _lastCount = -1; AudioManager.I.MusicPitch(1f);
+                        // back to the right track for where the retry starts (level, or the escape)
+                        WantMusic(Sim.escaping ? "music_escape" : LevelMusic);
                         break;
                     case SimEventType.Win:
                         StartCoroutine(Win());
+                        break;
+                    // ---- Level 3: data, vault, Guardian, escape
+                    case SimEventType.Fragment:
+                        a.Sfx("fragment", 1f);
+                        _hud.Flash(0.15f);
+                        _fx.Burst(at, 24, new[] { DH.Amber, DH.Cyan, Color.white }, 6, 0.7f, 0);
+                        _fx.FloatText(at + Vector2.up * 0.8f, ev.flag ? "ALL FRAGMENTS: VAULT UNLOCKED" : $"DATA FRAGMENT {Sim.stats.fragments}/{Sim.totalFragments}", DH.Amber);
+                        break;
+                    case SimEventType.VaultOpen:
+                        a.Sfx("vault_open", 1f);
+                        _cam.Shake(0.3f);
+                        _fx.FloatText(at + Vector2.up * 1.8f, "VAULT OPEN", DH.Green);
+                        break;
+                    case SimEventType.BossStart:
+                        a.Sfx("boss_roar", 1f);
+                        WantMusic("music_boss", true);
+                        _cam.Shake(0.4f);
+                        break;
+                    case SimEventType.BossTelegraph:
+                        a.Sfx(ev.info == "slam" ? "boss_charge" : "turret_aim", ev.info == "slam" ? 0.7f : 0.6f, ev.info == "orbs" ? 0.8f : 1f);
+                        break;
+                    case SimEventType.BossFire:
+                        if (ev.info == "laser") a.Sfx("sniper_shot", 0.9f);
+                        else if (ev.info == "orb") a.Sfx("boss_orb", 0.7f);
+                        else
+                        {
+                            a.Sfx("press_slam", 1f);
+                            _cam.Shake(0.45f);
+                            _fx.Burst(at, 20, new[] { DH.Cyan, DH.Hex("9a5cff"), Color.white }, 7, 0.5f, -12);
+                        }
+                        break;
+                    case SimEventType.BossHit:
+                        a.Sfx("boss_hit", 1f);
+                        _entities.FlashBoss();
+                        _cam.Shake(0.3f); _hitStop = Mathf.Max(_hitStop, 0.06f);
+                        _fx.Explosion(at);
+                        _fx.FloatText(at + Vector2.up * 0.6f, "CRITICAL HIT", DH.Cyan);
+                        break;
+                    case SimEventType.BossPhase:
+                        a.Sfx("boss_roar", 1f, 1.15f);
+                        _hud.Flash(0.25f);
+                        _fx.FloatText(at + Vector2.up, "GUARDIAN ENRAGED // PHASE " + ev.info, DH.Red);
+                        break;
+                    case SimEventType.BossDefeated:
+                        StartCoroutine(BossDeath(at));
+                        break;
+                    case SimEventType.Evidence:
+                        a.Sfx("shard", 1f, 0.9f);
+                        _hud.Flash(0.3f);
+                        _fx.Burst(at, 40, new[] { DH.Pink, DH.Cyan, Color.white }, 7, 1f, 0);
+                        _fx.FloatText(at + Vector2.up, "EVIDENCE SECURED", DH.Pink);
+                        break;
+                    case SimEventType.Lockdown:
+                        WantMusic("music_escape", true);     // the alarm-zone check plays the siren
+                        _cam.Shake(0.3f);
                         break;
                     // ---- Level 3 hazards
                     case SimEventType.TurretAim: a.Sfx("turret_aim", 0.55f); break;
@@ -293,6 +364,25 @@ namespace DataHeist
                 }
             }
             Sim.events.Clear();
+        }
+
+        /// <summary>The Guardian comes apart in a chain of explosions, then the arena falls quiet.</summary>
+        IEnumerator BossDeath(Vector2 at)
+        {
+            var a = AudioManager.I;
+            WantMusic(null);                         // a beat of silence before the lockdown
+            a.Sfx("boss_explode", 1f);
+            _hud.Flash(0.4f);
+            _fx.FloatText(at + Vector2.up * 1.5f, "GUARDIAN DESTROYED", DH.Amber);
+            for (int i = 0; i < 6; i++)
+            {
+                var pos = at + new Vector2(UnityEngine.Random.Range(-1.4f, 1.4f), UnityEngine.Random.Range(-1.5f, 1.5f));
+                _fx.Explosion(pos);
+                _fx.Burst(pos, 14, new[] { DH.Amber, DH.Orange, DH.Pink }, 7, 0.6f, -14);
+                _cam.Shake(0.35f);
+                if (i % 2 == 0) a.Sfx("explode", 0.8f, 0.8f + i * 0.05f);
+                yield return new WaitForSeconds(0.28f);
+            }
         }
 
         // ------------------------------------------------------------------ flow
@@ -356,6 +446,8 @@ namespace DataHeist
             if (_banked || Sim == null) return;
             _banked = true;
             SaveSystem.Data.bytes += Sim.stats.bytes;
+            SaveSystem.Data.totalDeaths += Sim.stats.deaths;
+            SaveSystem.Data.totalPlayTime += Sim.time;
             SaveSystem.Save();
         }
 
@@ -386,7 +478,12 @@ namespace DataHeist
                         unlocks.AppendLine($"> {c.displayName} JOINED THE CREW");
                     }
             }
-            bool best = SaveSystem.SubmitRecord(new LevelRecord { levelId = _level.id, score = score, rank = rank, time = Sim.time, bytes = s.bytes });
+            if (s.evidence && !data.guardianAward)
+            {
+                data.guardianAward = true;           // the final mission is done: Guardian of the City
+                unlocks.AppendLine("> AWARD EARNED: GUARDIAN OF THE CITY");
+            }
+            bool best = SaveSystem.SubmitRecord(new LevelRecord { levelId = _level.id, score = score, rank = rank, time = Sim.time, bytes = s.bytes, fragments = s.fragments });
             SaveSystem.Save();
             foreach (var c in CharacterDefinition.All)
                 if (c.unlock == UnlockType.Bytes && !data.unlocked.Contains(c.id) && data.bytes >= c.unlockCost)
@@ -397,6 +494,7 @@ namespace DataHeist
                 $"DRONES DOWN  <color=#2ff3ff>{s.drones}</color>\n" +
                 $"HITS TAKEN   <color=#2ff3ff>{s.hits}</color>\n" +
                 $"RETRIES      <color=#2ff3ff>{s.deaths}</color>\n" +
+                (Sim.totalFragments > 0 ? $"DATA FRAGS   <color=#2ff3ff>{s.fragments} / {Sim.totalFragments}</color>\n" : "") +
                 $"TIME         <color=#2ff3ff>{DH.FormatTime(Sim.time)}</color>\n" +
                 $"SCORE        <color=#2ff3ff>{score}</color>{(best ? "  <color=#ffd23a>NEW BEST</color>" : "")}";
             _paused = true;

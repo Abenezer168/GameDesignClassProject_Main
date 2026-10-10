@@ -22,6 +22,7 @@ namespace DataHeist.EditorTools
     {
         const string PrefKey = "DataHeist.SmokeTest.Running";
         const string BatchKey = "DataHeist.SmokeTest.Batch";
+        const string MuteKey = "DataHeist.SmokeTest.PrevMute";
 
         static readonly List<string> Errors = new List<string>();
         static IEnumerator<float> _steps;
@@ -38,6 +39,10 @@ namespace DataHeist.EditorTools
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             SessionState.SetBool(PrefKey, true);
             SessionState.SetBool(BatchKey, batch);
+            // the test plays through every screen in seconds: never let that reach the speakers
+            // (master mute silences output without touching the volume values the test checks)
+            SessionState.SetBool(MuteKey, EditorUtility.audioMasterMute);
+            EditorUtility.audioMasterMute = true;
             EditorSceneManager.OpenScene(SceneBy(DH.SceneMainMenu));
             EditorApplication.isPlaying = true;
         }
@@ -54,6 +59,7 @@ namespace DataHeist.EditorTools
         static void OnPlayMode(PlayModeStateChange s)
         {
             if (s != PlayModeStateChange.EnteredPlayMode) return;
+            EditorUtility.audioMasterMute = true;      // re-assert after the domain reload
             Errors.Clear();
             // PlayerPrefs are shared with normal play: snapshot the save and put it back afterwards
             _saveBefore = PlayerPrefs.GetString(SaveSystem.PrefsKey, "");
@@ -148,6 +154,8 @@ namespace DataHeist.EditorTools
 
         static IEnumerator<float> Steps()
         {
+            Check(EditorUtility.audioMasterMute, "smoke test runs muted (nothing reaches the speakers)");
+
             // --- first launch: the home page hands over to the story intro
             SaveSystem.Data.storySeen = false;
             SaveSystem.Data.bytes = 1000;
@@ -344,12 +352,25 @@ namespace DataHeist.EditorTools
                 }
             }
 
+            // --- Level 2 -> results -> NEXT LEVEL -> Level 3
+            var l2end = Object.FindAnyObjectByType<LevelController>();
+            if (l2end != null && l2end.Sim != null && l2end.levelId == "level02")
+            {
+                Place(l2end.Sim, l2end.Sim.L.exitX - 1f);
+                yield return 3f;
+                var next3 = GameObject.Find("NEXT LEVEL")?.GetComponent<UnityEngine.UI.Button>();
+                Check(next3 != null && next3.gameObject.activeInHierarchy && LevelCatalog.IsUnlocked("level03"), "Level 2 results offer NEXT LEVEL and unlock Level 3");
+                next3?.onClick.Invoke();
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneLevel03 && !LoadingScreen.Active, 12f)) yield return w;
+            }
+            else SceneManager.LoadScene(DH.SceneLevel03);
+
             // --- Level 3: environment and hazards
-            SceneManager.LoadScene(DH.SceneLevel03);
             yield return 5f;
             var l3 = Object.FindAnyObjectByType<LevelController>();
             Check(l3 != null && l3.levelId == "level03" && l3.Sim != null && l3.Sim.p.x > 3f, "Level 3 loads and runs");
             Check(Object.FindAnyObjectByType<VaultAmbience>() != null, "Level 3 uses the underground vault theme");
+            Check(AudioManager.I.CurrentMusic == "music_level03", $"Level 3 plays its own track ({AudioManager.I.CurrentMusic})");
             foreach (var w in Shot("13_level03_vault")) yield return w;
             if (l3 != null && l3.Sim != null)
             {
@@ -363,7 +384,55 @@ namespace DataHeist.EditorTools
                 }
                 Check(System.Array.Exists(s3.ents, e => e.t == "press" && e.st == 1), "crushers run their cycle");
                 Check(System.Array.Exists(s3.ents, e => e.t == "turret" && e.st > 0), "turrets wake up and aim");
+
+                // fragments: hand them over, then the vault door must open as the runner arrives
+                foreach (var e in s3.ents) if (e.t == "fragment" && e.alive) { e.alive = false; s3.stats.fragments++; }
+                Place(s3, 420f);
+                yield return 1.2f;
+                Check(System.Array.Exists(s3.ents, e => e.t == "vault" && e.st == 1), "the vault opens with all 3 fragments");
+                foreach (var w in Shot("18_level03_vault_open")) yield return w;
+
+                // the Guardian: the runner holds position in the arena
+                Place(s3, 446f);
+                yield return 2.6f;
+                var boss = s3.Boss;
+                Check(s3.ArenaBoss != null && s3.SpeedNow() == 0f && Mathf.Abs(s3.p.x - boss.w) < 0.05f, "the runner holds position in the Guardian's arena");
+                Check(AudioManager.I.CurrentMusic == "music_boss", $"the boss fight has its own track ({AudioManager.I.CurrentMusic})");
+                foreach (var w in Shot("19_level03_guardian")) yield return w;
+                yield return 1.0f;
+                foreach (var w in Shot("20_level03_guardian_attack")) yield return w;
+
+                // land the final blow with a reflected shot
+                boss.hp = 1;
+                s3.p.inv = 10f;
+                s3.bolts.Add(new SimBolt { x = boss.x - 2.5f, y = boss.y + 1.5f, vx = RunnerSim.BossReflectSpeed, kind = 2, reflected = true });
+                yield return 0.6f;
+                Check(boss.hp == 0, "a reflected shot damages the Guardian");
+                foreach (var w in Shot("21_level03_guardian_destroyed")) yield return w;
+                yield return 3.5f;
+                Check(s3.ArenaBoss == null && s3.p.x > boss.w + 3f, "the arena releases the runner after the Guardian falls");
+                foreach (var w in Until(() => s3.escaping, 4f)) yield return w;
+                Check(s3.escaping && s3.stats.evidence, "picking up the evidence starts the lockdown escape");
+                yield return 1.5f;
+                Check(AudioManager.I.CurrentMusic == "music_escape", $"the escape has its own track ({AudioManager.I.CurrentMusic})");
+                foreach (var w in Shot("22_level03_escape")) yield return w;
+
+                // reach the exit: Level 3 complete, award saved
+                Place(s3, s3.L.exitX - 1f);
+                yield return 3f;
+                Check(SaveSystem.Data.cleared.Contains("level03") && SaveSystem.Data.guardianAward, "clearing Level 3 saves completion and the Guardian of the City award");
+                foreach (var w in Shot("23_level03_results")) yield return w;
             }
+
+            // --- pure sim: missing a fragment must never soft-lock the run
+            var lvl3 = LevelData.Load("level03");
+            var vs = new RunnerSim(lvl3, CharacterDefinition.Get("kai"));
+            vs.checkpointX = 294f;                       // already past checkpoint 1, but fragment 1 (x 160) was missed
+            vs.p.x = 425f; vs.p.y = vs.GroundAt(425f); vs.p.onGround = true;
+            for (int i = 0; i < 240 && vs.state == SimState.Running; i++) { vs.Step(DH.SimStep, default); vs.events.Clear(); }
+            Check(vs.state == SimState.Dead, "the sealed vault door stops a runner without all fragments");
+            vs.Respawn();
+            Check(vs.p.x < 160f, $"retry goes back before the missed fragment (respawned at x = {vs.p.x:F0})");
         }
 
         /// <summary>Test helper: drop the runner on the roof at x, briefly invulnerable.</summary>
@@ -408,6 +477,7 @@ namespace DataHeist.EditorTools
         {
             EditorApplication.update -= Tick;
             Application.logMessageReceived -= OnLog;
+            EditorUtility.audioMasterMute = SessionState.GetBool(MuteKey, false);
             if (string.IsNullOrEmpty(_saveBefore)) PlayerPrefs.DeleteKey(SaveSystem.PrefsKey);
             else PlayerPrefs.SetString(SaveSystem.PrefsKey, _saveBefore);
             PlayerPrefs.Save();

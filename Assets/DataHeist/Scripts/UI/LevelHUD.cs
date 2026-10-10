@@ -29,6 +29,11 @@ namespace DataHeist
         Image _alarm, _flash, _glitch;
         public bool Alarm;
         float _flashT;
+        // Level 3: data fragments, the Guardian's health bar, the lockdown countdown
+        readonly List<Image> _fragments = new List<Image>();
+        GameObject _bossBar, _escape;
+        Image _bossFill, _escapeFill;
+        TextMeshProUGUI _bossName, _escapeTime, _escapeLabel;
         public float GlitchT;
 
         public void Init(RunnerSim sim, RunnerInput input)
@@ -105,6 +110,7 @@ namespace DataHeist
 
             _controls = UIKit.Text("Controls", root, "", 7, new Color(DH.Ink.r, DH.Ink.g, DH.Ink.b, 0.55f), TextAlignmentOptions.Right);
             _controls.rectTransform.Place(new Vector2(1, 0), new Vector2(1, 0), new Vector2(-12, 10), new Vector2(420, 12));
+            BuildLevel3(root);
             RefreshControls();
 
             // tutorial prompt card
@@ -153,6 +159,87 @@ namespace DataHeist
             _countSub.text = firstRun && remaining > 1 ? $"{L.name}  -  {L.subtitle.ToUpperInvariant()}" : "";
         }
 
+        void BuildLevel3(RectTransform root)
+        {
+            if (_sim.totalFragments > 0)
+            {
+                var label = UIKit.Text("FragLabel", root, "DATA", 5, DH.Amber);
+                label.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(12, -56), new Vector2(40, 8));
+                for (int i = 0; i < _sim.totalFragments; i++)
+                {
+                    var f = UIKit.Image("Fragment" + i, root, Color.white, SpriteLibrary.Get("UI/icon_fragment"));
+                    f.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(40 + i * 16, -52), new Vector2(14, 14));
+                    _fragments.Add(f);
+                }
+            }
+            if (_sim.Boss != null)
+            {
+                var bar = UIKit.Rect("BossBar", root);
+                bar.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -52), new Vector2(260, 22));
+                _bossBar = bar.gameObject;
+                _bossName = UIKit.Text("Name", bar, "CORPORATE SECURITY GUARDIAN", 6, DH.Red, TextAlignmentOptions.Center);
+                _bossName.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(260, 8));
+                var track = UIKit.Image("Track", bar, DH.PurpleLine);
+                track.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(260, 8));
+                _bossFill = UIKit.Image("Fill", track.rectTransform, DH.Red);
+                _bossFill.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(260, 8));
+                for (int i = 1; i < 3; i++)          // phase notches
+                {
+                    var n = UIKit.Image("Notch", track.rectTransform, DH.Night);
+                    n.rectTransform.Place(new Vector2(i / 3f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(2, 8));
+                }
+                _bossBar.SetActive(false);
+
+                var esc = UIKit.Rect("Escape", root);
+                // sits under the tutorial card's slot, so the LOCKDOWN prompt and the timer never overlap
+                esc.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -102), new Vector2(240, 40));
+                _escape = esc.gameObject;
+                _escapeLabel = UIKit.Text("Label", esc, "LOCKDOWN  //  REACH THE EXIT", 6, DH.Red, TextAlignmentOptions.Center);
+                _escapeLabel.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), Vector2.zero, new Vector2(240, 8));
+                _escapeTime = UIKit.Text("Time", esc, "", 16, DH.Ink, TextAlignmentOptions.Center);
+                _escapeTime.rectTransform.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -10), new Vector2(240, 18));
+                var et = UIKit.Image("Track", esc, DH.PurpleLine);
+                et.rectTransform.Place(new Vector2(0.5f, 0), new Vector2(0.5f, 0), Vector2.zero, new Vector2(240, 4));
+                _escapeFill = UIKit.Image("Fill", et.rectTransform, DH.Amber);
+                _escapeFill.rectTransform.Place(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(0, 4));
+                _escape.SetActive(false);
+            }
+        }
+
+        float _escapeStartX = -1;
+
+        void UpdateLevel3()
+        {
+            for (int i = 0; i < _fragments.Count; i++)
+                _fragments[i].color = i < _sim.stats.fragments ? Color.white : new Color(0.2f, 0.16f, 0.3f, 0.9f);
+            var boss = _sim.Boss;
+            if (boss != null && _bossBar != null)
+            {
+                bool fighting = _sim.ArenaBoss != null && boss.hp > 0;
+                _bossBar.SetActive(fighting);
+                if (fighting)
+                {
+                    _bossFill.rectTransform.sizeDelta = new Vector2(260f * boss.hp / RunnerSim.BossMaxHp, 8);
+                    _bossName.text = "CORPORATE SECURITY GUARDIAN  //  PHASE " + RunnerSim.BossPhase(boss);
+                }
+            }
+            if (_escape != null)
+            {
+                _escape.SetActive(_sim.escaping);
+                if (_sim.escaping)
+                {
+                    if (_escapeStartX < 0) _escapeStartX = _sim.p.x;
+                    float t = _sim.escapeT;
+                    bool urgent = t < 10f;
+                    _escapeTime.text = DH.FormatTime(t);
+                    _escapeTime.color = urgent && Mathf.Repeat(Time.unscaledTime, 0.5f) < 0.25f ? DH.Red : DH.Ink;
+                    float k = Mathf.Clamp01((_sim.p.x - _escapeStartX) / Mathf.Max(1f, _sim.L.exitX - _escapeStartX));
+                    _escapeFill.rectTransform.sizeDelta = new Vector2(240f * k, 4);
+                }
+                else _escapeStartX = -1;
+            }
+        }
+
         public void SetVisible(bool v) => _canvas.enabled = v;
 
         void Update()
@@ -177,6 +264,7 @@ namespace DataHeist
             _abilityName.color = ready ? _ch.color : DH.Dim;
 
             UpdatePrompt();
+            UpdateLevel3();
 
             // overlays
             float t = Time.unscaledTime;

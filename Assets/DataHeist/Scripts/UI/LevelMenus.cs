@@ -149,7 +149,13 @@ namespace DataHeist
         public void ShowOver(string cause, bool hasCheckpoint)
         {
             HideAll();
-            _overCause.text = cause == "fall" ? "You fell from the rooftops." : "Corporate security took you down.";
+            _overCause.text = cause switch
+            {
+                "fall" => "You fell.",
+                "vault" => "The vault stayed sealed: it needs all 3 data fragments.\nRetry takes you back before the one you missed.",
+                "lockdown" => "The facility locked down before you got out.",
+                _ => "Corporate security took you down.",
+            };
             _retryBtn.Label(hasCheckpoint ? "RETRY FROM CHECKPOINT" : "RETRY");
             _over.SetActive(true);
             UIKit.Select(_retryBtn);

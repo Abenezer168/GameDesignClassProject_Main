@@ -31,6 +31,12 @@ namespace DataHeist
         Sprite _shockOff, _signHang, _signFallen;
         Sprite[] _turretFrames;
         Sprite _pressHead, _pressShaft, _machineHang, _machineFallen;
+        Sprite _doorClosed, _doorOpen, _bossDead, _bossCharge, _bossSlam;
+        Sprite[] _bossIdle, _orbFrames, _waveFrames;
+        float _bossFlash;
+
+        /// <summary>White flash on the Guardian when a reflected shot lands (called by LevelController).</summary>
+        public void FlashBoss() => _bossFlash = 0.12f;
 
         public void Init(RunnerSim sim)
         {
@@ -42,6 +48,17 @@ namespace DataHeist
             _emOn = SpriteLibrary.Get("Obstacles/laser_emitter_on");
             _emOff = SpriteLibrary.Get("Obstacles/laser_emitter_off");
             _padFrames = SpriteLibrary.Anim("Obstacles/jumppad");
+            if (System.Array.Exists(sim.ents, e => e.t == "boss" || e.t == "vault"))
+            {
+                _doorClosed = SpriteLibrary.Get("Obstacles/vault_door_closed");
+                _doorOpen = SpriteLibrary.Get("Obstacles/vault_door_open");
+                _bossIdle = SpriteLibrary.Anim("Enemies/guardian_idle");
+                _bossCharge = SpriteLibrary.Get("Enemies/guardian_charge_00");
+                _bossSlam = SpriteLibrary.Get("Enemies/guardian_slam_00");
+                _bossDead = SpriteLibrary.Get("Enemies/guardian_dead_00");
+                _orbFrames = SpriteLibrary.Anim("Enemies/boss_orb");
+                _waveFrames = SpriteLibrary.Anim("Enemies/shockwave");
+            }
             if (System.Array.Exists(sim.ents, e => e.t == "turret" || e.t == "press" || e.kind == "machine"))
             {
                 _turretFrames = SpriteLibrary.Anim("Enemies/turret");
@@ -124,6 +141,31 @@ namespace DataHeist
                     v.extra = SR.Make("Glow", v.go.transform, SpriteLibrary.Get("FX/glow"), DH.SortProps - 2, new Vector3(e.w / 2f, 0.1f, 0));
                     v.extra.color = new Color(DH.Cyan.r, DH.Cyan.g, DH.Cyan.b, 0.35f);
                     v.extra.transform.localScale = new Vector3(e.w * 0.9f, 0.6f, 1);
+                    break;
+                case "fragment":
+                    v.frames = SpriteLibrary.Anim("Pickups/fragment"); v.fps = 8; v.sr.sortingOrder = DH.SortPickups + 1;
+                    v.extra = SR.Make("Glow", v.go.transform, SpriteLibrary.Get("FX/glow"), DH.SortPickups, Vector3.zero);
+                    v.extra.color = new Color(DH.Amber.r, DH.Amber.g, DH.Amber.b, 0.45f);
+                    v.extra.transform.localScale = Vector3.one * 1.3f;
+                    break;
+                case "evidence":
+                    v.frames = SpriteLibrary.Anim("Pickups/evidence"); v.fps = 6; v.sr.sortingOrder = DH.SortPickups + 1;
+                    v.extra = SR.Make("Glow", v.go.transform, SpriteLibrary.Get("FX/glow"), DH.SortPickups, Vector3.zero);
+                    v.extra.color = new Color(DH.Pink.r, DH.Pink.g, DH.Pink.b, 0.5f);
+                    v.extra.transform.localScale = Vector3.one * 1.8f;
+                    break;
+                case "vault":
+                    v.sr.sprite = _doorClosed; v.sr.sortingOrder = DH.SortProps + 1;
+                    break;
+                case "boss":
+                    v.sr.sortingOrder = DH.SortEnemies - 2;
+                    // aim line for the laser, red floor glow for the slam, core glow for the orbs
+                    v.extra = SR.Box("AimLine", v.go.transform, DH.Red, DH.SortBolts - 1, -14f, 0, 12.2f, px);
+                    v.extra.enabled = false;
+                    v.beam = SR.Box("SlamWarning", v.go.transform, new Color(1, 0.18f, 0.33f, 0.5f), DH.SortProps - 2, -12f, -2f, 12f, 3 * px);
+                    v.beam.enabled = false;
+                    v.emitter = SR.Make("Core", v.go.transform, SpriteLibrary.Get("FX/glow"), DH.SortEnemies - 1, new Vector3(0, 0.0f, 0));
+                    v.emitter.color = new Color(DH.Red.r, DH.Red.g, DH.Red.b, 0.6f);
                     break;
                 case "turret":
                     v.sr.sortingOrder = DH.SortEnemies;
@@ -235,6 +277,42 @@ namespace DataHeist
                         v.extra.transform.localPosition = new Vector3(0, 0.1f, 0);
                         break;
                     }
+                    case "fragment":
+                    case "evidence":
+                        v.go.transform.position = new Vector3(SR.Snap(e.x), SR.Snap(e.y + Mathf.Sin(t * 3f + e.ox) * 3f / DH.PPU), 0);
+                        v.extra.transform.localScale = Vector3.one * ((e.t == "evidence" ? 1.8f : 1.3f) + Mathf.Sin(t * 5f) * 0.15f);
+                        break;
+                    case "vault":
+                        v.sr.sprite = e.st == 1 ? _doorOpen : _doorClosed;
+                        break;
+                    case "boss":
+                    {
+                        // 128 px sprite, centre pivot: centre sits 2 units above the floor
+                        v.go.transform.position = new Vector3(SR.Snap(e.x), SR.Snap(e.y + 2f), 0);
+                        int tele = RunnerSim.BossTelegraphing(e);
+                        bool dead = e.st >= 5;
+                        v.sr.sprite = dead ? _bossDead
+                            : tele == 2 ? _bossSlam
+                            : tele >= 0 || e.st == 4 ? _bossCharge
+                            : _bossIdle.Length > 0 ? _bossIdle[Mathf.FloorToInt(t * 3f) % _bossIdle.Length] : null;
+                        _bossFlash = Mathf.Max(0, _bossFlash - Time.deltaTime);
+                        v.sr.color = _bossFlash > 0 ? new Color(3f, 3f, 3f) : dead ? new Color(0.6f, 0.6f, 0.7f) : Color.white;
+                        if (dead && e.st == 5) v.go.transform.position += new Vector3(Mathf.Sin(t * 60f) * 2f / DH.PPU, 0, 0);
+                        float left = RunnerSim.BossTelegraphLeft(e);
+                        v.extra.enabled = tele == 0 && (left > 0.25f || Mathf.FloorToInt(t * 30f) % 2 == 0);
+                        if (v.extra.enabled)
+                        {
+                            float aim = _sim.GroundAt(p.x) + 0.8f - (e.y + 2f);
+                            v.extra.transform.localPosition = new Vector3(v.extra.transform.localPosition.x, aim, 0);
+                            var c = DH.Red; c.a = 0.4f + 0.5f * (1f - Mathf.Clamp01(left));
+                            v.extra.color = c;
+                        }
+                        v.beam.enabled = tele == 2 && Mathf.FloorToInt(t * 16f) % 2 == 0;
+                        v.emitter.enabled = !dead;
+                        float charge = tele == 1 || e.st == 4 ? 1.6f + Mathf.Sin(t * 30f) * 0.3f : 0.9f;
+                        v.emitter.transform.localScale = Vector3.one * charge;
+                        break;
+                    }
                     case "turret":
                     {
                         v.sr.sprite = _turretFrames.Length > 2
@@ -314,9 +392,14 @@ namespace DataHeist
                     _boltPool.Add(SR.Make("Bolt", transform, null, DH.SortBolts, Vector3.zero));
                 var sr = _boltPool[i++];
                 sr.gameObject.SetActive(true);
-                var frames = b.sniper && _sniperBolt != null && _sniperBolt.Length > 0 ? _sniperBolt : _boltFrames;
+                var frames = b.kind == 3 && _orbFrames != null ? _orbFrames
+                    : b.kind == 4 && _waveFrames != null ? _waveFrames
+                    : (b.sniper || b.kind == 2) && _sniperBolt != null && _sniperBolt.Length > 0 ? _sniperBolt : _boltFrames;
                 if (frames.Length > 0) sr.sprite = frames[Mathf.FloorToInt(t * 20f) % frames.Length];
-                sr.transform.position = new Vector3(SR.Snap(b.x), SR.Snap(b.y), 0);
+                // shockwaves roll along the floor (sprite centre 0.3 up); slashed-back shots turn cyan and fly right
+                sr.transform.position = new Vector3(SR.Snap(b.x), SR.Snap(b.kind == 4 ? b.y + 0.3f : b.y), 0);
+                sr.flipX = b.reflected;
+                sr.color = b.reflected ? DH.Cyan : Color.white;
             }
             for (; i < _boltPool.Count; i++) _boltPool[i].gameObject.SetActive(false);
         }

@@ -95,6 +95,11 @@ def patrol_drone(x, dy=1.6):
     return e('gunner', x, dy, kind='gunner', move='patrol')
 
 
+def fragment(x, dy=0.7):
+    """encrypted data fragment; all three are needed to open the vault"""
+    return e('fragment', x, dy)
+
+
 def sign(x, hang=4.2):
     """hanging billboard centred on x; drops as the runner closes in"""
     return e('sign', x, hang)
@@ -129,6 +134,7 @@ turret(116)
 byte_line(100, 106, 0.35, 0.75)
 turret(146, 'low')
 byte_line(130, 136)
+fragment(160, 0.7)
 patrol_drone(172)
 turret(188)
 byte_line(176, 182, 0.35, 0.75)
@@ -143,6 +149,7 @@ laser(218, 'low_cycle')
 byte_arc(218 - 2.2)
 laser(236, 'high_cycle')
 byte_line(233, 239, 0.35, 0.75)
+fragment(246, 0.7)
 laser(256, 'low_cycle')
 laser(270, 'high_cycle')
 patrol_drone(284, 1.0)
@@ -151,7 +158,7 @@ e('checkpoint', 294)
 # ----------------------------------------------------------------------------
 # SECTION 3 - MACHINE HALL: crushers and falling machinery
 # ----------------------------------------------------------------------------
-roof(303, 412)
+roof(303, 536)
 byte_arc(300 - 0.6)
 prompt(308, 'S', 'CRUSHERS', 'Presses slam down to knee height. Slide under them, or pass while they are up.')
 press(324)
@@ -161,9 +168,44 @@ machine(362)
 shock(374, 2.5)
 byte_arc(374 - 1.0)
 press(392)
-byte_line(398, 406)
+fragment(400, 0.7)
+byte_line(404, 412)
 
-# ---- (Phase 2: data fragments, vault door, boss arena; Phase 3: escape) ----
+# ----------------------------------------------------------------------------
+# SECTION 4 - THE VAULT: three fragments open the door; the Guardian waits inside
+# ----------------------------------------------------------------------------
+prompt(416, '!', 'THE VAULT', 'The door needs all three data fragments.')
+e('vault', 430)
+e('checkpoint', 438)
+ARENA = 450.0
+prompt(444, 'LMB', 'SECURITY GUARDIAN', 'Slash its lasers and orbs back at it. Jump the shockwaves.')
+e('boss', ARENA + 9, w=ARENA)
+e('evidence', ARENA + 16, 1.0)
+
+# ----------------------------------------------------------------------------
+# SECTION 5 - LOCKDOWN ESCAPE: every hit costs 3 seconds
+# ----------------------------------------------------------------------------
+e('checkpoint', 472)
+zones.append(dict(x0=474, x1=700, speed=1.12, alarm=True))
+prompt(474, '!', 'LOCKDOWN', 'The facility is sealing. Reach the exit before the timer runs out.')
+press(488)
+laser(502, 'low_cycle')
+byte_arc(502 - 2.2)
+turret(522)
+roof(539, 626)
+byte_arc(536 - 0.6)
+machine(554)
+shock(568, 2.5)
+byte_arc(568 - 1.0)
+laser(584, 'high_cycle')
+press(598)
+turret(614, 'low')
+roof(629, 760)
+byte_arc(626 - 0.6)
+patrol_drone(644)
+laser(658, 'low_cycle')
+press(674)
+byte_line(682, 694)
 
 # ----------------------------------------------------------------------------
 # Decor (seeded, purely cosmetic)
@@ -177,14 +219,14 @@ for r in roofs:
         decor.append(dict(k=kind, x=round(x, 2), y=r['y'], layer=-1))
         x += rr.uniform(5, 10)
 
-EXIT = 412.0
+EXIT = 702.0
 level = dict(
     id='level03', name='UNDERGROUND VAULT', subtitle='Halcyon Archive - Shard 3 of 5',
     theme='vault',
     physics=PHYS, killY=-9.0, spawnX=0.0, exitX=EXIT,
     roofs=roofs, platforms=platforms, entities=ents, prompts=prompts,
     zones=zones, decor=decor,
-    parTime=95.0,
+    parTime=120.0,
 )
 
 if __name__ == '__main__':
