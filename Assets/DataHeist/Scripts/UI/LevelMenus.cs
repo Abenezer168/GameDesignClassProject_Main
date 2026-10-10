@@ -10,12 +10,12 @@ namespace DataHeist
     /// <summary>Pause (with volume + key rebinding), Signal Lost (game over) and Extraction Complete (results) screens.</summary>
     public class LevelMenus : MonoBehaviour
     {
-        public event Action OnResume, OnRestart, OnRetryCheckpoint, OnQuitToRunners, OnQuitToMenu;
+        public event Action OnResume, OnRestart, OnRetryCheckpoint, OnQuitToRunners, OnQuitToMenu, OnNextLevel;
         public event Action OnBindingsChanged;
 
         RunnerInput _input;
         GameObject _pause, _controls, _over, _results;
-        Button _resumeBtn, _retryBtn, _continueBtn, _controlsBack;
+        Button _resumeBtn, _retryBtn, _continueBtn, _nextBtn, _controlsBack;
         TextMeshProUGUI _overCause, _rank, _rows, _unlocks, _wallet;
         readonly List<(InputAction action, Button button)> _bindButtons = new List<(InputAction, Button)>();
 
@@ -119,7 +119,7 @@ namespace DataHeist
 
         void BuildResults(RectTransform root)
         {
-            var box = Modal("Results", root, DH.Cyan, new Vector2(420, 250), out _results);
+            var box = Modal("Results", root, DH.Cyan, new Vector2(420, 274), out _results);
             Title(box, "EXTRACTION COMPLETE", DH.Cyan);
             var row = UIKit.Rect("Row", box);
             UIKit.Size(row, 130);
@@ -133,7 +133,8 @@ namespace DataHeist
             _unlocks.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(120, 14), new Vector2(260, 34));
             _wallet = UIKit.Text("Wallet", row, "", 7, DH.Dim);
             _wallet.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(120, 0), new Vector2(260, 12));
-            _continueBtn = Btn(box, "CONTINUE", () => OnQuitToRunners?.Invoke(), true);
+            _nextBtn = Btn(box, "NEXT LEVEL", () => OnNextLevel?.Invoke(), true);
+            _continueBtn = Btn(box, "CHANGE RUNNER", () => OnQuitToRunners?.Invoke());
             Btn(box, "RUN IT AGAIN", () => OnRestart?.Invoke());
         }
 
@@ -154,7 +155,8 @@ namespace DataHeist
             UIKit.Select(_retryBtn);
         }
 
-        public void ShowResults(string rank, string rowsText, string unlocks, int wallet)
+        /// <param name="nextLevelName">Shown on the NEXT LEVEL button; null hides it (end of the campaign).</param>
+        public void ShowResults(string rank, string rowsText, string unlocks, int wallet, string nextLevelName = null)
         {
             HideAll();
             _rank.text = rank;
@@ -163,7 +165,10 @@ namespace DataHeist
             _unlocks.text = unlocks;
             _wallet.text = $"WALLET  {wallet} BYTES";
             _results.SetActive(true);
-            UIKit.Select(_continueBtn);
+            _nextBtn.gameObject.SetActive(nextLevelName != null);
+            if (nextLevelName != null) _nextBtn.Label("NEXT LEVEL:  " + nextLevelName);
+            _continueBtn.Label(nextLevelName != null ? "CHANGE RUNNER" : "CONTINUE");
+            UIKit.Select(nextLevelName != null ? _nextBtn : _continueBtn);
         }
     }
 }

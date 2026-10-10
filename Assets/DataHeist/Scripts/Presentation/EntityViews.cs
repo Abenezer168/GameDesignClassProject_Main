@@ -27,6 +27,8 @@ namespace DataHeist
         Sprite[] _boltFrames, _beamFrames;
         Sprite _cpOn, _cpOff, _emOn, _emOff;
         Sprite[] _padFrames;
+        Sprite[] _sniperFrames, _sniperBolt, _shockOn;
+        Sprite _shockOff, _signHang, _signFallen;
 
         public void Init(RunnerSim sim)
         {
@@ -38,6 +40,15 @@ namespace DataHeist
             _emOn = SpriteLibrary.Get("Obstacles/laser_emitter_on");
             _emOff = SpriteLibrary.Get("Obstacles/laser_emitter_off");
             _padFrames = SpriteLibrary.Anim("Obstacles/jumppad");
+            if (System.Array.Exists(sim.ents, e => e.t == "sniper" || e.t == "shock" || e.t == "sign"))
+            {
+                _sniperFrames = SpriteLibrary.Anim("Enemies/sniper_window");
+                _sniperBolt = SpriteLibrary.Anim("Enemies/sniper_bolt");
+                _shockOn = SpriteLibrary.Anim("Obstacles/shock_on");
+                _shockOff = SpriteLibrary.Get("Obstacles/shock_off");
+                _signHang = SpriteLibrary.Get("Obstacles/sign_hang");
+                _signFallen = SpriteLibrary.Get("Obstacles/sign_fallen");
+            }
             foreach (var e in sim.ents) Create(e);
         }
 
@@ -85,6 +96,31 @@ namespace DataHeist
                     break;
                 case "exit":
                     v.go.SetActive(false); break;
+                case "sniper":
+                    // the nest sits in a penthouse wall behind the roof; the laser sight is a thin box
+                    v.sr.sortingOrder = DH.SortDecor + 3;
+                    v.extra = SR.Box("LaserSight", v.go.transform, DH.Red, DH.SortBolts - 1, -20f, 0, 19.3f, px);
+                    v.extra.enabled = false;
+                    v.beam = SR.Make("Dot", v.go.transform, SpriteLibrary.Get("FX/glow"), DH.SortBolts, Vector3.zero);
+                    v.beam.color = DH.Red;
+                    v.beam.transform.localScale = Vector3.one * 0.35f;
+                    v.beam.enabled = false;
+                    break;
+                case "shock":
+                    v.sr.drawMode = SpriteDrawMode.Tiled;
+                    v.sr.sprite = _shockOff;
+                    v.sr.size = new Vector2(e.w, 0.25f);
+                    v.sr.sortingOrder = DH.SortProps - 1;
+                    v.extra = SR.Make("Glow", v.go.transform, SpriteLibrary.Get("FX/glow"), DH.SortProps - 2, new Vector3(e.w / 2f, 0.1f, 0));
+                    v.extra.color = new Color(DH.Cyan.r, DH.Cyan.g, DH.Cyan.b, 0.35f);
+                    v.extra.transform.localScale = new Vector3(e.w * 0.9f, 0.6f, 1);
+                    break;
+                case "sign":
+                    v.sr.sprite = _signHang;
+                    v.sr.sortingOrder = DH.SortProps + 2;
+                    v.extra = SR.Box("Cable", v.go.transform, DH.Hex("6a5f8e"), DH.SortProps + 1, -0.7f, 1.1f, px, 8f);
+                    v.beam = SR.Box("Cable2", v.go.transform, DH.Hex("6a5f8e"), DH.SortProps + 1, 0.65f, 1.1f, px, 8f);
+                    break;
             }
             _views.Add(v);
         }
@@ -106,6 +142,8 @@ namespace DataHeist
                 float y = e.y;
                 if (e.t == "repair") y += Mathf.Sin(t * 3f) * 2f / DH.PPU;
                 if (e.t == "shard") y += Mathf.Sin(t * 2.5f) * 3f / DH.PPU;
+                if (e.t == "sniper") y += 1f;                    // centre of the 2-unit penthouse wall
+                if (e.t == "sign" && e.st == RunnerSim.SignShaking) y += Mathf.Sin(t * 70f) * 1.5f / DH.PPU;
                 v.go.transform.position = new Vector3(SR.Snap(e.x), SR.Snap(e.t == "laser" ? e.y : y), 0);
 
                 if (v.frames != null && v.frames.Length > 0)
@@ -135,6 +173,44 @@ namespace DataHeist
                         }
                         break;
                     }
+                    case "sniper":
+                    {
+                        bool aiming = e.st == 1;
+                        float k = aiming ? 1f - e.cd / RunnerSim.SniperTelegraph : 0f;   // 0 -> 1 as the shot nears
+                        v.sr.sprite = _sniperFrames.Length > 1 && e.st == 2 && e.cd > RunnerSim.SniperCooldown - 0.1f ? _sniperFrames[1] : _sniperFrames[0];
+                        v.extra.enabled = aiming && (k < 0.75f || Mathf.FloorToInt(t * 30f) % 2 == 0);
+                        v.beam.enabled = aiming;
+                        if (aiming)
+                        {
+                            float ly = e.aimY - (e.y + 1f);
+                            v.extra.transform.localPosition = new Vector3(v.extra.transform.localPosition.x, ly, 0);
+                            v.extra.transform.localScale = new Vector3(v.extra.transform.localScale.x, (k > 0.75f ? 3f : 2f) / DH.PPU / SR.Pixel.bounds.size.x, 1);
+                            var c = DH.Red; c.a = 0.35f + 0.6f * k;
+                            v.extra.color = c;
+                            // the dot rides along the line toward the runner's chest
+                            float dotX = Mathf.Max(p.x + 0.3f, e.x - 19.3f) - e.x;
+                            v.beam.transform.localPosition = new Vector3(dotX, ly, 0);
+                        }
+                        break;
+                    }
+                    case "shock":
+                    {
+                        bool live = RunnerSim.ShockLive(e) && _sim.empT <= 0;
+                        v.sr.sprite = live && _shockOn.Length > 0 ? _shockOn[Mathf.FloorToInt(t * 18f) % _shockOn.Length] : _shockOff;
+                        v.sr.size = new Vector2(e.w, 0.25f);
+                        v.extra.enabled = live;
+                        // tiled sprites pivot at the bottom-centre; e.x is the strip's left edge
+                        v.go.transform.position = new Vector3(SR.Snap(e.x + e.w / 2f), SR.Snap(e.y - 2f / DH.PPU), 0);
+                        v.extra.transform.localPosition = new Vector3(0, 0.1f, 0);
+                        break;
+                    }
+                    case "sign":
+                    {
+                        bool landed = e.st == RunnerSim.SignLanded;
+                        v.sr.sprite = landed ? _signFallen : _signHang;
+                        v.extra.enabled = v.beam.enabled = e.st <= RunnerSim.SignShaking;
+                        break;
+                    }
                     case "laser":
                     {
                         bool off = _sim.empT > 0;
@@ -160,7 +236,8 @@ namespace DataHeist
                     _boltPool.Add(SR.Make("Bolt", transform, null, DH.SortBolts, Vector3.zero));
                 var sr = _boltPool[i++];
                 sr.gameObject.SetActive(true);
-                if (_boltFrames.Length > 0) sr.sprite = _boltFrames[Mathf.FloorToInt(t * 20f) % _boltFrames.Length];
+                var frames = b.sniper && _sniperBolt != null && _sniperBolt.Length > 0 ? _sniperBolt : _boltFrames;
+                if (frames.Length > 0) sr.sprite = frames[Mathf.FloorToInt(t * 20f) % frames.Length];
                 sr.transform.position = new Vector3(SR.Snap(b.x), SR.Snap(b.y), 0);
             }
             for (; i < _boltPool.Count; i++) _boltPool[i].gameObject.SetActive(false);

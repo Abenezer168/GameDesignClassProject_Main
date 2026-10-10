@@ -309,6 +309,49 @@ namespace DataHeist.EditorTools
             AudioAudit("level 1", 1);
             Check(AudioManager.I.CurrentMusic == "music_level01", "level music starts on GO");
             foreach (var w in Shot("08_level01")) yield return w;
+
+            // --- finish Level 1 -> results -> NEXT LEVEL -> Level 2
+            if (level != null && level.Sim != null)
+            {
+                var sim = level.Sim;
+                Place(sim, sim.L.exitX - 1f);
+                yield return 3f;
+                var next = GameObject.Find("NEXT LEVEL")?.GetComponent<UnityEngine.UI.Button>();
+                Check(next != null && next.gameObject.activeInHierarchy, "Level 1 results offer NEXT LEVEL");
+                Check(SaveSystem.Data.cleared.Contains("level01") && LevelCatalog.IsUnlocked("level02"), "clearing Level 1 unlocks Level 2");
+                foreach (var w in Shot("09_results_next_level")) yield return w;
+                next?.onClick.Invoke();
+                yield return 1.0f;
+                Check(LoadingScreen.Active, "NEXT LEVEL goes through the loading screen");
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneLevel02, 10f)) yield return w;
+                yield return 5f;
+                var l2 = Object.FindAnyObjectByType<LevelController>();
+                Check(l2 != null && l2.levelId == "level02" && l2.Sim != null && l2.Sim.p.x > 5f, "Level 2 loads and runs");
+                Check(AudioManager.I.CurrentMusic == "music_level02", $"Level 2 plays its own track ({AudioManager.I.CurrentMusic})");
+                if (l2 != null && l2.Sim != null)
+                {
+                    var s2 = l2.Sim;
+                    Place(s2, 88f);          // live wires at 94
+                    yield return 0.5f;
+                    foreach (var w in Shot("10_level02_live_wires")) yield return w;
+                    Place(s2, 232f);         // falling sign at 244
+                    yield return 0.75f;
+                    foreach (var w in Shot("11_level02_falling_sign")) yield return w;
+                    Place(s2, 302f);         // sniper at 318
+                    yield return 0.3f;
+                    Check(System.Array.Exists(s2.ents, e => e.t == "sniper" && e.st >= 1), "sniper aims its laser as the runner closes in");
+                    foreach (var w in Shot("12_level02_sniper")) yield return w;
+                }
+            }
+        }
+
+        /// <summary>Test helper: drop the runner on the roof at x, briefly invulnerable.</summary>
+        static void Place(RunnerSim sim, float x)
+        {
+            sim.p.x = x;
+            sim.p.y = sim.GroundAt(x);
+            sim.p.vy = 0; sim.p.onGround = true; sim.p.sliding = false;
+            sim.p.inv = 5f;
         }
 
         static IEnumerable<float> Until(System.Func<bool> done, float timeout)

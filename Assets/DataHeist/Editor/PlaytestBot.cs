@@ -93,6 +93,24 @@ namespace DataHeist.EditorTools
         static float Score((RunnerSim sim, Path path) n) =>
             n.sim.stats.bytes * 3 + n.sim.p.x - (n.path?.effort ?? 0) + (_natural ? n.sim.stats.drones * 4 : 0);
 
+        /// <summary>Replays a route and counts what it survived, proving the hazards really engage.</summary>
+        static string HazardReport(LevelData level, CharacterDefinition ch, string route)
+        {
+            var counts = new Dictionary<SimEventType, int>();
+            var sim = new RunnerSim(level, ch);
+            for (int d = 0; d < route.Length && sim.state == SimState.Running; d++)
+                for (int k = 0; k < Ticks && sim.state == SimState.Running; k++)
+                {
+                    sim.Step(Dt, Frame(route[d] - '0', k));
+                    foreach (var ev in sim.events) counts[ev.type] = counts.TryGetValue(ev.type, out var c) ? c + 1 : 1;
+                    sim.events.Clear();
+                }
+            int Get(SimEventType t) => counts.TryGetValue(t, out var c) ? c : 0;
+            if (Get(SimEventType.SniperShot) + Get(SimEventType.SignFall) + Get(SimEventType.ShockOn) == 0) return "";
+            return $" | survived {Get(SimEventType.SniperShot)} sniper shots ({Get(SimEventType.Deflect)} slashed), " +
+                   $"{Get(SimEventType.SignFall)} falling signs ({Get(SimEventType.SignSmash)} smashed), {Get(SimEventType.ShockOn)} live-floor pulses";
+        }
+
         static string Route(Path p)
         {
             var sb = new System.Text.StringBuilder();
@@ -104,7 +122,7 @@ namespace DataHeist.EditorTools
         /// Records the bot's clean Level 1 run for every runner into Resources/DataHeist/Demo; the
         /// title screen replays them through the real simulation as its attract-mode background.
         /// </summary>
-        [MenuItem("Data Heist/Record Title Screen Demo", priority = 21)]
+        [MenuItem("Data Heist/Record Title Screen Demo", priority = 22)]
         public static void RecordDemo()
         {
             var level = LevelData.Load("level01");
@@ -131,27 +149,42 @@ namespace DataHeist.EditorTools
         }
 
         [MenuItem("Data Heist/Validate Level 1 (Playtest Bot)", priority = 20)]
-        public static void ValidateLevel1()
+        public static void ValidateLevel1() => Validate("level01");
+
+        [MenuItem("Data Heist/Validate Level 2 (Playtest Bot)", priority = 21)]
+        public static void ValidateLevel2() => Validate("level02");
+
+        /// <summary>Headless entry point: validates every level and exits 0 (all clear) or 1.</summary>
+        public static void ValidateAllBatch()
         {
-            var level = LevelData.Load("level01");
-            if (level == null) return;
+            bool ok = true;
+            foreach (var l in LevelCatalog.All) ok &= Validate(l.id);
+            EditorApplication.Exit(ok ? 0 : 1);
+        }
+
+        /// <summary>Every runner must find a zero-hit, no-ability route to the exit.</summary>
+        public static bool Validate(string levelId)
+        {
+            var level = LevelData.Load(levelId);
+            if (level == null) return false;
             var sw = Stopwatch.StartNew();
             bool all = true;
             var roster = CharacterDefinition.All;
             for (int i = 0; i < roster.Count; i++)
             {
-                EditorUtility.DisplayProgressBar("Data Heist Playtest Bot", $"Running {roster[i].displayName}...", i / (float)roster.Count);
+                EditorUtility.DisplayProgressBar("Data Heist Playtest Bot", $"{level.name}: {roster[i].displayName}...", i / (float)roster.Count);
                 var r = Run(level, roster[i]);
                 if (r.cleared)
-                    Debug.Log($"[PlaytestBot] {r.character}: CLEARED with 0 hits in {r.time:F1}s, bytes {r.bytes}/{r.totalBytes}, drones {r.drones}, rank {r.rank}");
+                    Debug.Log($"[PlaytestBot] {levelId} {r.character}: CLEARED with 0 hits in {r.time:F1}s, bytes {r.bytes}/{r.totalBytes}, drones {r.drones}, rank {r.rank}{HazardReport(level, roster[i], r.route)}");
                 else
                 {
                     all = false;
-                    Debug.LogError($"[PlaytestBot] {r.character}: NO zero-hit route past x = {r.failX:F1} (t = {r.time:F1}s). Re-space the obstacles there.");
+                    Debug.LogError($"[PlaytestBot] {levelId} {r.character}: NO zero-hit route past x = {r.failX:F1} (t = {r.time:F1}s). Re-space the obstacles there.");
                 }
             }
             EditorUtility.ClearProgressBar();
-            Debug.Log($"[PlaytestBot] {(all ? "All runners can clear Level 1 without taking a hit." : "Level needs fixes.")} ({sw.Elapsed.TotalSeconds:F1}s)");
+            Debug.Log($"[PlaytestBot] {levelId}: {(all ? "all runners can clear it without taking a hit." : "level needs fixes.")} ({sw.Elapsed.TotalSeconds:F1}s)");
+            return all;
         }
     }
 }

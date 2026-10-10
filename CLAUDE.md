@@ -20,15 +20,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 There is no CLI build/lint/test pipeline; work happens in the Unity Editor via the **Data Heist** menu (`Assets/DataHeist/Editor/DataHeistSetup.cs`):
 - **Data Heist > Setup Project** — first run after pulling: pixel-art reimport (32 PPU, point filter, no compression), creates `CharacterDefinition` assets, adds scenes to Build Settings, wires Main Menu Play.
-- **Data Heist > Play Level 1** — jump straight into the level.
-- **Data Heist > Validate Level 1 (Playtest Bot)** — the closest thing to a test suite. Beam-searches inputs through the real `RunnerSim` and must find a zero-hit, no-ability clear for every runner. Run it after any change to `RunnerSim` or the level JSON.
+- **Data Heist > Play Level 1 / Play Level 2 / Play Story** — jump straight into a scene.
+- **Data Heist > Validate Level 1 / Level 2 (Playtest Bot)** — the closest thing to a test suite. Beam-searches inputs through the real `RunnerSim` and must find a zero-hit, no-ability clear for every runner. Run it after any change to `RunnerSim` or the level JSON.
 - **Data Heist > Debug > Unlock All Runners + 1000 Bytes** / **Reset Save Data**.
 - **Data Heist > Debug > Smoke Test**: a play-mode run through the title screen, Settings, all story shots, Character Select and Level 1. It fails on any console error and writes screenshots to `Logs/Screens/`.
 
 Both checks also run headless. This only works while the project is **not** open in an editor; the user's editor may have the nested clone open, which is fine:
 ```bash
 UNITY=/Applications/Unity/Hub/Editor/6000.3.22f1/Unity.app/Contents/MacOS/Unity
-$UNITY -batchmode -quit -projectPath "$PWD" -executeMethod DataHeist.EditorTools.PlaytestBot.ValidateLevel1 -logFile /tmp/bot.log
+$UNITY -batchmode -projectPath "$PWD" -executeMethod DataHeist.EditorTools.PlaytestBot.ValidateAllBatch -logFile /tmp/bot.log   # every level; exit code 1 on failure
 $UNITY -batchmode -projectPath "$PWD" -executeMethod DataHeist.EditorTools.SmokeTest.RunBatch -logFile /tmp/smoke.log   # exit code 1 on failure
 ```
 Compile errors show up in the log as `error CS`. Screenshots in `Logs/Screens/*.png` are the way to check layout.
@@ -63,5 +63,9 @@ cd Tools/WebPrototype && node bot.js ../../Assets/DataHeist/Resources/DataHeist/
 **Home page attract demo.** `DemoPlayer` replays `Resources/DataHeist/Demo/level01_<runner>.txt` (one `DemoActions` index per 9 sim ticks) through the real `RunnerSim` behind the menu. Those routes are recorded by the playtest bot (**Data Heist > Record Title Screen Demo**). Any change to Level 1 or to sim physics desyncs them, so re-record after such a change.
 
 **Menus and story.** The title screen (`MainMenuController`), Character Select and the story intro (`Scripts/Story/`, StoryScene) are all built at runtime with `UIKit`. They share `MenuBackdrop` and `Parallax` for the city, `ScreenFX` for the vignette and scanlines, and `SceneFader.Load` for transitions. Story shots are `StoryShot` subclasses staged side by side along x, and story art comes from `gen_story.py`. Overlay-canvas UI can't be positioned with `WorldToScreenPoint` in tests, so world-pinned UI uses viewport maths.
+
+**Levels and hazards.** `LevelCatalog` lists the campaign in order (id, scene, name). A level unlocks when the previous id is in `SaveData.cleared`, and the results screen offers NEXT LEVEL. Each level scene is one GameObject: a `LevelController` with a serialized `levelId`. Level 2's hazards (`sniper`, `shock`, `sign`) live in `RunnerSim.UpdateLevel2`. They are triggered by distance, never by clock time, so retries stay deterministic. New `SimEventType` values go at the end of the enum, and `EntityViews` / `LevelController.HandleEvents` render them. `Tools/WebPrototype/sim.js` has **not** been ported for Level 2.
+
+**Serialized fields go stale.** Scene files keep old values of public MonoBehaviour fields (this bit `StoryController` and `CharacterSelectController`). Prefer `const`s or catalog lookups for flow and tuning that shouldn't be per-scene.
 
 **Level design invariants** the bot and README enforce: coyote time of 0.10 s, a jump buffer of 0.12 s, gunner bolts at standing-chest height, a slide never stands you up under a ceiling, and i-frames after every hit.

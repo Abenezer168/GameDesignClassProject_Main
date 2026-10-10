@@ -64,6 +64,13 @@ SFX = {
     'emp':         [L('scifi', 'lowFrequency_explosion_000'), L('scifi', 'forceField_000', 0.8), L('digital', 'zapThreeToneDown', 0.4, 0.1)],
     'glitch':      [L('ui', 'glitch_001'), L('ui', 'glitch_003', 1.0, 0.06), L('ui', 'glitch_002', 1.0, 0.11),
                     L('ui', 'glitch_004', 1.0, 0.17), L('digital', 'zapThreeToneDown', 0.45, 0.2, slice=(0.0, 0.6))],
+    # Level 2 hazards
+    'sniper_aim':  [L('digital', 'phaserUp2', 0.8, pitch=0.55), L('scifi', 'computerNoise_000', 0.35, 0.0, slice=(0.0, 0.6))],
+    'sniper_shot': [L('scifi', 'laserLarge_000'), L('impact', 'impactMetal_heavy_000', 0.6)],
+    'shock':       [L('digital', 'zap1'), L('ui', 'glitch_004', 0.6, 0.03)],
+    'sign_creak':  [L('impact', 'impactMetal_light_002', 0.8, pitch=0.7), L('impact', 'impactPlank_medium_000', 0.5, 0.08)],
+    'sign_crash':  [L('impact', 'impactMetal_heavy_002'), L('impact', 'impactGlass_heavy_000', 0.8, 0.02),
+                    L('impact', 'impactPlate_heavy_000', 0.6, 0.05)],
     # pickups and level objects
     'byte':        [L('digital', 'pepSound3', 0.9)],
     'repair':      [L('digital', 'powerUp11')],

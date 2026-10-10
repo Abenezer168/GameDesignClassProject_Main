@@ -204,7 +204,7 @@ namespace DataHeist
                     SpriteLibrary.Portrait(id);
                 });
             }
-            yield return ("DECRYPTING SECTOR 7 MAP", () => LevelData.Load(levelId));
+            yield return (levelId == "level01" ? "DECRYPTING SECTOR 7 MAP" : "DECRYPTING SECTOR 9 MAP", () => LevelData.Load(levelId));
             yield return ("RENDERING ROOFTOPS", () =>
             {
                 foreach (var s in new[] { "violet", "teal", "brick" })
@@ -225,6 +225,17 @@ namespace DataHeist
                 SpriteLibrary.Anim("Pickups/shard");
                 SpriteLibrary.Anim("FX/explosion");
                 SpriteLibrary.Anim("FX/slash");
+                if (levelId != "level01")
+                {
+                    SpriteLibrary.Anim("Enemies/sniper_window");
+                    SpriteLibrary.Anim("Enemies/sniper_bolt");
+                    SpriteLibrary.Anim("Obstacles/shock_on");
+                    SpriteLibrary.Get("Obstacles/shock_off");
+                    SpriteLibrary.Get("Obstacles/sign_hang");
+                    SpriteLibrary.Get("Obstacles/sign_fallen");
+                    foreach (var v in new[] { "0", "1", "2" }) SpriteLibrary.Get("Tiles/facade_glass_" + v);
+                    SpriteLibrary.Get("Tiles/rooftop_glass");
+                }
             });
             yield return ("TUNING THE SYNTHWAVE", () => AudioManager.I.PreloadSfx());
             if (story)

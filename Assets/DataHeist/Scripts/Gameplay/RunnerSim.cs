@@ -15,7 +15,9 @@ namespace DataHeist
     public enum SimEventType
     {
         Jump, AirJump, Land, Slide, Dive, Attack, Byte, Repair, Shard, Pad, DroneDown, CanHit,
-        Hurt, Dead, Checkpoint, Dash, DashEnd, Emp, Glitch, AbilityDenied, Shoot, Deflect, Respawn, Win
+        Hurt, Dead, Checkpoint, Dash, DashEnd, Emp, Glitch, AbilityDenied, Shoot, Deflect, Respawn, Win,
+        // Level 2 hazards
+        SniperAim, SniperShot, ShockOn, SignShake, SignFall, SignLand, SignSmash
     }
 
     public struct SimEvent
@@ -31,6 +33,8 @@ namespace DataHeist
         public int id;
         public string t, kind, move, mode;
         public float x, y, ox, oy, baseY, h, cd, phase;
+        public float w, aimY, vy;   // Level 2: shock width, sniper aim height, falling-sign speed
+        public int st;              // Level 2 state machine (sniper / shock / sign)
         public bool alive = true;
         public SimEntity Clone() => (SimEntity)MemberwiseClone();
     }
@@ -39,6 +43,7 @@ namespace DataHeist
     {
         public float x, y, vx;
         public bool alive = true;
+        public bool sniper;         // sniper tracer: faster, longer, drawn red
     }
 
     public class SimPlayer
@@ -84,7 +89,7 @@ namespace DataHeist
             {
                 list.Add(new SimEntity
                 {
-                    t = e.t, kind = e.kind, move = e.move, mode = e.mode, h = e.h,
+                    t = e.t, kind = e.kind, move = e.move, mode = e.mode, h = e.h, w = e.w,
                     x = e.x, y = e.y, ox = e.x, oy = e.y, baseY = e.y, cd = 0.8f,
                     phase = (e.x * 1.7f) % 6.28f,
                 });
@@ -105,7 +110,7 @@ namespace DataHeist
             L = o.L; P = o.P; ch = o.ch;
             ents = new SimEntity[o.ents.Length];
             for (int i = 0; i < ents.Length; i++) ents[i] = o.ents[i].Clone();
-            foreach (var b in o.bolts) bolts.Add(new SimBolt { x = b.x, y = b.y, vx = b.vx, alive = b.alive });
+            foreach (var b in o.bolts) bolts.Add(new SimBolt { x = b.x, y = b.y, vx = b.vx, alive = b.alive, sniper = b.sniper });
             p = o.p.Clone(); stats = o.stats.Clone(); state = o.state;
             time = o.time; empT = o.empT; magnetT = o.magnetT; checkpointX = o.checkpointX;
             totalBytes = o.totalBytes; cpDrones = o.cpDrones;
@@ -326,7 +331,7 @@ namespace DataHeist
                     if (p.abilityCD > 0) { Emit(SimEventType.AbilityDenied); return; }
                     p.abilityCD = ch.abilityCooldown; empT = 4f;
                     foreach (var e in ents)
-                        if (e.alive && (e.t == "drone" || e.t == "gunner") && Mathf.Abs(e.x - p.x) < 11f) KillDrone(e, "emp");
+                        if (e.alive && (e.t == "drone" || e.t == "gunner" || e.t == "sniper") && Mathf.Abs(e.x - p.x) < 11f) KillDrone(e, "emp");
                     bolts.RemoveAll(b => Mathf.Abs(b.x - p.x) <= 11f);
                     Emit(SimEventType.Emp, p.x, p.y);
                     return;
@@ -352,11 +357,91 @@ namespace DataHeist
                 case "byte": return Rect.MinMaxRect(e.x - 0.3f, e.y - 0.3f, e.x + 0.3f, e.y + 0.3f);
                 case "repair": return Rect.MinMaxRect(e.x - 0.35f, e.y - 0.35f, e.x + 0.35f, e.y + 0.35f);
                 case "shard": return Rect.MinMaxRect(e.x - 0.5f, e.y - 0.7f, e.x + 0.5f, e.y + 0.7f);
+                case "shock": return Rect.MinMaxRect(e.x, e.y, e.x + e.w, e.y + 0.15f);
+                case "sign":
+                    if (e.st == SignFalling) return Rect.MinMaxRect(e.x - 1f, e.y, e.x + 1f, e.y + 1.0f);
+                    if (e.st == SignLanded) return Rect.MinMaxRect(e.x - 0.9f, e.y, e.x + 0.9f, e.y + 0.7f);
+                    return Rect.zero;
             }
             return Rect.zero;
         }
 
-        static bool HasBox(SimEntity e) => e.t != "checkpoint" && e.t != "exit";
+        static bool HasBox(SimEntity e) =>
+            e.t != "checkpoint" && e.t != "exit" && e.t != "sniper" && !(e.t == "sign" && e.st < SignFalling);
+
+        // ------------------------------------------------------------------ Level 2 hazards
+        // Every hazard is triggered by the runner's distance, never by the clock, so a run (and a
+        // checkpoint retry) always meets it the same way and the playtest bot can prove it fair.
+        public const float SniperAimAt = 17f;      // starts aiming when this far ahead
+        public const float SniperTelegraph = 0.9f; // red laser on screen before the shot
+        public const float SniperCooldown = 1.6f;
+        public const float SniperBoltSpeed = 24f;
+        public const float ShockTrigger = 14f, ShockPeriod = 1.5f, ShockOnTime = 0.9f;
+        public const float SignTrigger = 10.5f, SignShakeTime = 0.35f, SignGravity = 40f;
+        public const int SignHanging = 0, SignShaking = 1, SignFalling = 2, SignLanded = 3;
+
+        /// <summary>A shock strip is live for the first ShockOnTime of every ShockPeriod after it triggers.</summary>
+        public static bool ShockLive(SimEntity e) => e.st == 1 && Mathf.Repeat(e.cd, ShockPeriod) < ShockOnTime;
+
+        void UpdateLevel2(SimEntity e, float dt)
+        {
+            float dx = e.x - p.x;
+            switch (e.t)
+            {
+                case "sniper":
+                    // st 0 waiting, 1 aiming (telegraph), 2 cooling down
+                    if (e.st == 0 && dx < SniperAimAt && dx > 5f)
+                    {
+                        e.st = 1; e.cd = SniperTelegraph;
+                        e.aimY = e.y + 0.8f;               // chest height of a runner standing on this roof
+                        Emit(SimEventType.SniperAim, e.x, e.aimY);
+                    }
+                    else if (e.st == 1)
+                    {
+                        e.cd -= dt;
+                        if (e.cd <= 0)
+                        {
+                            bolts.Add(new SimBolt { x = e.x - 0.7f, y = e.aimY, vx = -SniperBoltSpeed, sniper = true });
+                            Emit(SimEventType.SniperShot, e.x, e.aimY);
+                            e.st = 2; e.cd = SniperCooldown;
+                        }
+                    }
+                    else if (e.st == 2)
+                    {
+                        e.cd -= dt;
+                        if (e.cd <= 0) e.st = 0;
+                    }
+                    break;
+                case "shock":
+                    if (e.st == 0 && dx < ShockTrigger) { e.st = 1; e.cd = 0; Emit(SimEventType.ShockOn, e.x, e.y); }
+                    else if (e.st == 1)
+                    {
+                        bool was = ShockLive(e);
+                        e.cd += dt;
+                        if (!was && ShockLive(e) && dx < 12f && dx > -e.w) Emit(SimEventType.ShockOn, e.x, e.y);
+                    }
+                    break;
+                case "sign":
+                    if (e.st == SignHanging && dx < SignTrigger)
+                    {
+                        e.st = SignShaking; e.cd = SignShakeTime;
+                        Emit(SimEventType.SignShake, e.x, e.y);
+                    }
+                    else if (e.st == SignShaking)
+                    {
+                        e.cd -= dt;
+                        if (e.cd <= 0) { e.st = SignFalling; e.vy = 0; Emit(SimEventType.SignFall, e.x, e.y); }
+                    }
+                    else if (e.st == SignFalling)
+                    {
+                        e.vy -= SignGravity * dt;
+                        e.y += e.vy * dt;
+                        float g = GroundAt(e.x);
+                        if (e.y <= g) { e.y = g; e.st = SignLanded; Emit(SimEventType.SignLand, e.x, e.y); }
+                    }
+                    break;
+            }
+        }
 
         static bool Overlap(float ax0, float ay0, float ax1, float ay1, Rect b) =>
             ax0 < b.xMax && ax1 > b.xMin && ay0 < b.yMax && ay1 > b.yMin;
@@ -385,6 +470,7 @@ namespace DataHeist
                         }
                     }
                 }
+                if (e.t == "sniper" || e.t == "shock" || e.t == "sign") UpdateLevel2(e, dt);
                 if (e.t == "byte" && magnetT > 0)
                 {
                     float dx = p.x - e.x, dy = (p.y + 0.6f) - e.y, d = Mathf.Sqrt(dx * dx + dy * dy);
@@ -471,13 +557,28 @@ namespace DataHeist
                     case "laser":
                         if (touching && !dashing && empT <= 0) Hurt();
                         break;
+                    case "shock":
+                        // only feet on a live strip: jump it, wait for it to drop, or EMP it
+                        if (touching && p.onGround && !dashing && empT <= 0 && ShockLive(e)) Hurt();
+                        break;
+                    case "sign":
+                        if (atk && Overlap(ax0, ay0, ax1, ay1, b)) { e.alive = false; Emit(SimEventType.SignSmash, e.x, e.y + 0.4f); break; }
+                        if (touching && !dashing)
+                        {
+                            e.alive = false;
+                            Emit(SimEventType.SignSmash, e.x, e.y + 0.4f);
+                            Hurt();
+                        }
+                        break;
                 }
             }
 
             foreach (var bo in bolts)
             {
                 if (!bo.alive) continue;
-                var bb = Rect.MinMaxRect(bo.x - 0.25f, bo.y - 0.12f, bo.x + 0.25f, bo.y + 0.12f);
+                var bb = bo.sniper
+                    ? Rect.MinMaxRect(bo.x - 0.4f, bo.y - 0.12f, bo.x + 0.4f, bo.y + 0.12f)
+                    : Rect.MinMaxRect(bo.x - 0.25f, bo.y - 0.12f, bo.x + 0.25f, bo.y + 0.12f);
                 if (atk && Overlap(ax0, ay0, ax1, ay1, bb))
                 {
                     bo.alive = false; Emit(SimEventType.Deflect, bo.x, bo.y); continue;
@@ -519,6 +620,7 @@ namespace DataHeist
             {
                 if (e.t == "checkpoint" || e.ox <= cx + 0.01f) continue;
                 e.x = e.ox; e.y = e.oy; e.alive = true; e.cd = 0.8f;
+                e.st = 0; e.vy = 0;
             }
             int collected = 0;
             foreach (var e in ents) if (e.t == "byte" && !e.alive) collected++;

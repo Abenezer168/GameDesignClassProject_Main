@@ -70,6 +70,7 @@ namespace DataHeist
             _menus.OnRetryCheckpoint += RetryCheckpoint;
             _menus.OnQuitToRunners += () => Leave(DH.SceneCharacterSelect);
             _menus.OnQuitToMenu += () => Leave(DH.SceneMainMenu);
+            _menus.OnNextLevel += NextLevel;
             _menus.OnBindingsChanged += _hud.RefreshControls;
 
             _cam.Bind(Sim);
@@ -252,6 +253,30 @@ namespace DataHeist
                     case SimEventType.Win:
                         StartCoroutine(Win());
                         break;
+                    // ---- Level 2 hazards
+                    case SimEventType.SniperAim: a.Sfx("sniper_aim", 0.7f); break;
+                    case SimEventType.SniperShot:
+                        a.Sfx("sniper_shot", 0.9f);
+                        _cam.Shake(0.12f);
+                        _fx.Burst(new Vector2(ev.x - 0.8f, ev.y), 8, new[] { DH.Red, Color.white }, 4, 0.25f, 0);
+                        break;
+                    case SimEventType.ShockOn:
+                        a.Sfx("shock", 0.4f, UnityEngine.Random.Range(0.95f, 1.08f));
+                        break;
+                    case SimEventType.SignShake:
+                        a.Sfx("sign_creak", 0.7f);
+                        _fx.Burst(at + new Vector2(0, 1.3f), 6, new[] { DH.Amber, Color.white }, 2.5f, 0.3f, -14);
+                        break;
+                    case SimEventType.SignLand:
+                        a.Sfx("sign_crash", 0.9f);
+                        _cam.Shake(0.25f);
+                        _fx.Burst(at + Vector2.up * 0.3f, 18, new[] { DH.Pink, DH.Cyan, DH.Amber, DH.Hex("3c2766") }, 6, 0.6f, -18);
+                        break;
+                    case SimEventType.SignSmash:
+                        a.Sfx("sign_crash", 0.7f, 1.15f);
+                        _fx.Burst(at, 22, new[] { DH.Pink, DH.Cyan, Color.white, DH.Hex("3c2766") }, 7, 0.6f, -16);
+                        _fx.FloatText(at + Vector2.up * 0.7f, "SMASH", DH.Pink);
+                        break;
                 }
             }
             Sim.events.Clear();
@@ -336,9 +361,11 @@ namespace DataHeist
             BankBytes();
             var unlocks = new StringBuilder();
             var data = SaveSystem.Data;
+            var next = LevelCatalog.Next(_level.id);
             if (!data.cleared.Contains(_level.id))
             {
                 data.cleared.Add(_level.id);
+                if (next.HasValue) unlocks.AppendLine($"> LEVEL {next.Value.number} {next.Value.name} UNLOCKED");
                 foreach (var c in CharacterDefinition.All)
                     if (c.unlock == UnlockType.ClearLevel && c.unlockLevelId == _level.id && !data.unlocked.Contains(c.id))
                     {
@@ -360,7 +387,20 @@ namespace DataHeist
                 $"TIME         <color=#2ff3ff>{DH.FormatTime(Sim.time)}</color>\n" +
                 $"SCORE        <color=#2ff3ff>{score}</color>{(best ? "  <color=#ffd23a>NEW BEST</color>" : "")}";
             _paused = true;
-            _menus.ShowResults(rank, rows, unlocks.ToString(), data.bytes);
+            _menus.ShowResults(rank, rows, unlocks.ToString(), data.bytes, next.HasValue ? next.Value.name : null);
+        }
+
+        /// <summary>Results screen NEXT LEVEL: same runner, straight into the next level through the loading screen.</summary>
+        void NextLevel()
+        {
+            var next = LevelCatalog.Next(_level.id);
+            if (!next.HasValue) return;
+            Time.timeScale = 1f;
+            BankBytes();
+            GameSession.CurrentLevel = next.Value.id;
+            AudioManager.I.StopMusic();
+            LoadingScreen.Run(next.Value.scene, GamePreloader.Steps(story: false, levelId: next.Value.id, onlyRunner: _ch.id),
+                sceneLabel: "DROPPING INTO " + next.Value.name);
         }
     }
 }

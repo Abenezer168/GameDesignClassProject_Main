@@ -71,12 +71,14 @@ namespace DataHeist
     [Serializable]
     public class EntityData
     {
-        public string t;      // byte, can, barrier, drone, gunner, laser, pad, repair, checkpoint, shard, exit
+        public string t;      // byte, can, barrier, drone, gunner, laser, pad, repair, checkpoint, shard, exit,
+                              // sniper, shock, sign (Level 2)
         public float x, y;
         public string kind;   // drone kind
         public string move;   // bob | still
         public float h;       // laser height
         public string mode;   // laser: low | high
+        public float w;       // shock: floor strip width
     }
 
     [Serializable]

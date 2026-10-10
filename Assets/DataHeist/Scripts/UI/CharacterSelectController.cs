@@ -13,7 +13,6 @@ namespace DataHeist
     /// </summary>
     public class CharacterSelectController : MonoBehaviour
     {
-        public string levelScene = DH.SceneLevel01;
         public string backScene = DH.SceneMainMenu;
 
         class Card
@@ -33,11 +32,16 @@ namespace DataHeist
         readonly List<(Image fill, TextMeshProUGUI value)> _stats = new List<(Image, TextMeshProUGUI)>();
         Button _go, _back;
         MenuBackdrop _backdrop;
+        // mission picker (LevelCatalog order); a level unlocks when the previous one is cleared
+        readonly List<(Button button, Image bg, TextMeshProUGUI label)> _missions = new List<(Button, Image, TextMeshProUGUI)>();
+        int _mission;
 
         void Start()
         {
             var roster = CharacterDefinition.All;
             _index = Mathf.Max(0, IndexOf(GameSession.SelectedCharacter));
+            int cur = LevelCatalog.IndexOf(GameSession.CurrentLevel);
+            _mission = LevelCatalog.IsUnlocked(LevelCatalog.All[cur].id) ? cur : 0;
             BuildBackdrop();
             BuildUI(roster);
             ScreenFX.Add(50, 0.55f, 0.07f);
@@ -71,6 +75,18 @@ namespace DataHeist
             if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame) Move(-1);
             if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) Confirm();
             if (kb.escapeKey.wasPressedThisFrame) Back();
+            if (kb.downArrowKey.wasPressedThisFrame || kb.sKey.wasPressedThisFrame) PickMission(_mission + 1);
+            if (kb.upArrowKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame) PickMission(_mission - 1);
+        }
+
+        /// <summary>Selects a mission; locked ones refuse with a sound and stay unselected.</summary>
+        void PickMission(int i)
+        {
+            if (i < 0 || i >= LevelCatalog.All.Count || i == _mission) return;
+            if (!LevelCatalog.IsUnlocked(LevelCatalog.All[i].id)) { AudioManager.I.Sfx("denied", 0.5f); return; }
+            _mission = i;
+            AudioManager.I.Sfx("ui_move", 0.6f);
+            Refresh();
         }
 
         void Move(int d)
@@ -120,7 +136,26 @@ namespace DataHeist
             }
 
             _best = UIKit.Text("Best", root, "", 6, DH.Dim);
-            _best.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(16, -178), new Vector2(340, 12));
+            _best.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(16, -230), new Vector2(340, 12));
+
+            var mh = UIKit.Text("MissionHead", root, "MISSION", 6, DH.Amber);
+            mh.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(16, -178), new Vector2(120, 10));
+            for (int i = 0; i < LevelCatalog.All.Count; i++)
+            {
+                int idx = i;
+                var r = UIKit.Rect("Mission_" + LevelCatalog.All[i].id, root);
+                r.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(16 + i * 172, -190), new Vector2(166, 30));
+                var bg = r.gameObject.AddComponent<Image>();
+                bg.color = DH.Panel;
+                var b = r.gameObject.AddComponent<Button>();
+                b.targetGraphic = bg;
+                var nav = b.navigation; nav.mode = Navigation.Mode.None; b.navigation = nav;
+                b.onClick.AddListener(() => PickMission(idx));
+                var label = UIKit.Text("Label", r, "", 6, DH.Ink);
+                label.rectTransform.Stretch(6);
+                label.lineSpacing = 16;
+                _missions.Add((b, bg, label));
+            }
 
             // detail panel
             var panel = UIKit.Panel("Detail", root, DH.Cyan);
@@ -160,7 +195,7 @@ namespace DataHeist
             _back = UIKit.Button("Back", pr, "BACK", Back, false);
             _back.GetComponent<RectTransform>().Place(new Vector2(1, 0), new Vector2(1, 0), new Vector2(-14, 14), new Vector2(64, 26));
 
-            var hint = UIKit.Text("Hint", root, "< > CHOOSE    ENTER CONFIRM    ESC BACK", 6, new Color(1, 1, 1, 0.5f));
+            var hint = UIKit.Text("Hint", root, "< > RUNNER    UP/DOWN MISSION    ENTER RUN    ESC BACK", 6, new Color(1, 1, 1, 0.5f));
             hint.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(16, 10), new Vector2(340, 10));
             UIKit.Select(_go);
         }
@@ -212,8 +247,20 @@ namespace DataHeist
                 _go.interactable = ready;
                 _lock.text = ready ? "" : "Clear Level 1 to recruit.";
             }
-            var rec = SaveSystem.GetRecord("level01");
-            _best.text = rec != null ? $"BEST  {rec.rank}   {rec.score} PTS   {DH.FormatTime(rec.time)}" : "LEVEL 1: NO RECORD YET";
+            var lvl = LevelCatalog.All[_mission];
+            var rec = SaveSystem.GetRecord(lvl.id);
+            _best.text = rec != null ? $"LEVEL {lvl.number} BEST  {rec.rank}   {rec.score} PTS   {DH.FormatTime(rec.time)}" : $"LEVEL {lvl.number}: NO RECORD YET";
+            for (int i = 0; i < _missions.Count; i++)
+            {
+                var m = LevelCatalog.All[i];
+                bool open = LevelCatalog.IsUnlocked(m.id), sel = i == _mission;
+                var (_, bg, label) = _missions[i];
+                bg.color = sel ? new Color(DH.Pink.r, DH.Pink.g, DH.Pink.b, 0.35f) : DH.Panel;
+                label.text = open
+                    ? $"<color=#{(sel ? "ffd23a" : "8a7fb0")}>LEVEL {m.number:00}</color>\n{m.name}"
+                    : $"<color=#ff2d55>LEVEL {m.number:00}  LOCKED</color>\nCLEAR LEVEL {m.number - 1} FIRST";
+                label.color = open ? DH.Ink : DH.Dim;
+            }
         }
 
         void SetStat(int i, float k, string value)
@@ -228,11 +275,12 @@ namespace DataHeist
             if (SaveSystem.IsUnlocked(c))
             {
                 GameSession.SelectedCharacter = c.id;
-                GameSession.CurrentLevel = "level01";
+                var lvl = LevelCatalog.All[_mission];
+                GameSession.CurrentLevel = lvl.id;
                 AudioManager.I.Sfx("ui_select", 0.8f);
                 AudioManager.I.StopMusic();
-                LoadingScreen.Run(levelScene, GamePreloader.Steps(story: false, levelId: "level01", onlyRunner: c.id),
-                    sceneLabel: "DROPPING INTO NEON ROOFTOPS");
+                LoadingScreen.Run(lvl.scene, GamePreloader.Steps(story: false, levelId: lvl.id, onlyRunner: c.id),
+                    sceneLabel: "DROPPING INTO " + lvl.name);
             }
             else if (SaveSystem.TryUnlock(c))
             {

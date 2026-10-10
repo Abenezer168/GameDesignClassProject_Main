@@ -13,7 +13,7 @@ Everything for Level 1 "Neon Rooftops", the four playable runners and the full g
 3. Open `Assets/DataHeist/Scenes/MainMenu` and press Play. The flow is **Press any key → (story on first launch) → home page → Play → Choose Your Runner → Level 1**.
    - Shortcut: **Data Heist > Play Level 1**.
    - Debug commands: **Data Heist > Debug > Unlock All Runners + 1000 Bytes** and **Reset Save Data**.
-4. After editing the level, run **Data Heist > Validate Level 1 (Playtest Bot)**. It proves every runner can still finish with zero hits.
+4. After editing a level, run **Data Heist > Validate Level 1 / Level 2 (Playtest Bot)**. It proves every runner can still finish with zero hits.
 5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It plays through the title screen, Settings, every story shot, Character Select and Level 1, and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
 
 ## Title screen and settings
@@ -112,6 +112,33 @@ Scenes/          CharacterSelectScene, Level01_NeonRooftops (one GameObject each
 - **One source of truth.** The same rules and the same `level01.json` drive the browser prototype (`Tools/WebPrototype`), so a level change shows up in both builds.
 
 **Data-driven levels.** Levels are JSON. `Tools/DataHeistGenerators/gen_level.py` authors them with helpers such as `byte_arc` (bytes that follow the real jump parabola) and `prompt`. To make Level 2, copy the script, change the sections, regenerate the JSON, then run the bot.
+
+## Level 2: "Corporate District" (644 m, about 85 s)
+
+Level 2 unlocks when Level 1 is cleared. You can reach it two ways: **NEXT LEVEL** on Level 1's results screen (same runner, through the loading screen), or the **MISSION** picker in Character Select (up/down or click). It is authored by `Tools/DataHeistGenerators/gen_level02.py`, a copy of `gen_level.py` with three new helpers. The scene is `Level02_CorporateDistrict`, created by **Setup Project**. The art comes from `gen_level2_art.py`: glass-tower rooftops, the sniper nest, the tracer round, the live floor and the billboard.
+
+| Hazard | How it works | How to beat it |
+|---|---|---|
+| **Sniper** (`sniper`) | A penthouse window behind the roof. At 17 m it paints a **red laser sight** at chest height for 0.9 s; the line thickens and flickers just before the shot. Then a fast tracer (24 m/s) fires. | Slide under it, jump over it, or slash the round. Jax's EMP silences the nest. |
+| **Live wires** (`shock`) | An electrified floor strip. From 14 m away it is live for 0.9 s of every 1.5 s. | Jump it, or cross while it's dark. EMP shorts it out. |
+| **Falling sign** (`sign`) | A Halcyon billboard hanging 4.2 m up. At 10.5 m it shakes and sparks, then falls and lands as a wreck on the roof. | Jump the wreck, or slash it (in the air or on the roof) to smash it. |
+
+Every hazard is **triggered by distance, not by the clock**, so a run and a checkpoint retry always meet it the same way, and the playtest bot can prove the level is fair.
+
+| Section | Metres | Teaches |
+|---|---|---|
+| 0 Lobby | 0–70 | Warm-up on the glass towers |
+| 1 Live Wires | 70–175 | Electric floors on their own, then with cans |
+| 2 Falling Signs | 175–282 | Billboards (one floor up), then a drone. **Checkpoint 1** |
+| 3 Snipers | 285–402 | Snipers on their own, then mixed with cans and wires |
+| 4 Combos | 405–524 | Jump pad to a catwalk, then wires, sniper, sign and gunner together. **Checkpoint 2** |
+| 5 Lockdown | 527–644 | Alarm zone at 112% speed with every hazard, then the Data Shard and extraction |
+
+There are 217 Data Bytes, 2 repair kits, 2 checkpoints, 6 snipers, 7 live floors and 5 signs. The level plays `music_level02` ("Cyber March").
+
+**Validation:** run **Data Heist > Validate Level 2 (Playtest Bot)**. It proves every runner can clear the level with zero hits and no abilities, and reports what each route survived. Currently every run survives all 6 sniper shots, all 5 falling signs and 14 live-floor pulses, so the hazards really engage. Headless, `PlaytestBot.ValidateAllBatch` checks every level and exits 0 or 1.
+
+**To add a level:** copy `gen_level02.py`, add the level to `LevelCatalog`, create its scene (copy `CreateLevel02Scene`), add a `music_<levelId>` track, then run the bot.
 
 ## Audio
 
