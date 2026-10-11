@@ -1,6 +1,6 @@
-# The Data Heist: Level 1 + Runner Roster
+# The Data Heist: Full Game Design Notes
 
-Everything for Level 1 "Neon Rooftops", the four playable runners and the full game loop lives in `Assets/DataHeist`. Nothing in the team's existing folders was removed. Two small changes were made: the Main Menu **Play** button now loads Character Select, and two scenes were added to Build Settings.
+Everything for the game lives in `Assets/DataHeist`: the title screen and story intro, the four playable runners, the three levels (Level 1 "Neon Rooftops", Level 2 "Corporate District" and Level 3 "The Underground Data Vault" with the Guardian boss and the lockdown escape), the cinematic ending, the completion screen and the credits. Each part has its own section below. Nothing in the team's existing folders was removed. The team's old Options, Shop, GameScreen and GameOver scenes now reroute to the new screens, and **Setup Project** adds the Data Heist scenes to Build Settings.
 
 ## Quick start (Unity 6000.3.22f1)
 
@@ -11,10 +11,10 @@ Everything for Level 1 "Neon Rooftops", the four playable runners and the full g
    - checks Build Settings
    - wires the Main Menu Play button
 3. Open `Assets/DataHeist/Scenes/MainMenu` and press Play. The flow is **Press any key → (story on first launch) → home page → Play → Choose Your Runner → Level 1**.
-   - Shortcut: **Data Heist > Play Level 1**.
-   - Debug commands: **Data Heist > Debug > Unlock All Runners + 1000 Bytes** and **Reset Save Data**.
-4. After editing a level, run **Data Heist > Validate Level 1 / Level 2 (Playtest Bot)**. It proves every runner can still finish with zero hits.
-5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It runs **muted** (Unity's master mute), so nothing plays through your speakers while it races through the game. It plays through the title screen, Settings, every story shot, Character Select and Level 1, and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
+   - Shortcuts: **Data Heist > Play Level 1 / Play Level 2 / Play Level 3 / Play Story / Play Ending**.
+   - Debug commands: **Data Heist > Debug > Unlock All Runners, Levels + 1000 Bytes** and **Reset Save Data**.
+4. After editing a level, run **Data Heist > Validate Level 1 / Level 2 / Level 3 (Playtest Bot)**. It proves every runner can still finish with zero hits.
+5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It runs **muted** (Unity's master mute), so nothing plays through your speakers while it races through the game. It plays through the title screen, Settings (including clicking the audio sliders), Shop, every story shot, Character Select, all three levels, the Guardian fight, the escape, the ending, the completion screen and the credits, and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
 
 ## Title screen and settings
 
