@@ -35,6 +35,7 @@ namespace DataHeist
         public bool guardianAward;          // set when the final mission (Level 3) is completed
         public int totalDeaths;             // every failed attempt, all levels
         public float totalPlayTime;         // seconds spent in runs, all levels
+        public bool endingSeen;             // the final cinematic has played at least once
     }
 
     /// <summary>PlayerPrefs-backed JSON save. One global instance; call Save() after changes.</summary>

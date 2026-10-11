@@ -417,12 +417,72 @@ namespace DataHeist.EditorTools
                 Check(AudioManager.I.CurrentMusic == "music_escape", $"the escape has its own track ({AudioManager.I.CurrentMusic})");
                 foreach (var w in Shot("22_level03_escape")) yield return w;
 
-                // reach the exit: Level 3 complete, award saved
+                // reach the exit: Level 3 complete, award saved, and the escape rolls into the ending
                 Place(s3, s3.L.exitX - 1f);
                 yield return 3f;
                 Check(SaveSystem.Data.cleared.Contains("level03") && SaveSystem.Data.guardianAward, "clearing Level 3 saves completion and the Guardian of the City award");
-                foreach (var w in Shot("23_level03_results")) yield return w;
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneEnding && !LoadingScreen.Active, 15f)) yield return w;
+                Check(SceneManager.GetActiveScene().name == DH.SceneEnding, "Level 3's escape rolls straight into the ending");
             }
+
+            // --- the ending: six chapters (3x speed, the hero walks himself), then completion and credits
+            var ending = Object.FindAnyObjectByType<EndingController>();
+            if (ending != null)
+            {
+                EndingController.AutoWalk = true;
+                Time.timeScale = 3f;
+                string[] names = { "30_ending_truth", "31_ending_transform", "32_ending_walk", "33_ending_ceremony", "34_ending_statue", "35_ending_finale" };
+                bool citizensReacted = false, fireworks = false;
+                for (int c = 0; c < EndingController.Chapters; c++)
+                {
+                    foreach (var w in Until(() => ending == null || ending.Chapter >= c, 120f)) yield return w;
+                    if (ending == null) break;
+                    Check(ending.Chapter == c, $"ending chapter {c + 1} plays");
+                    yield return c == 3 ? 7f : c == 1 ? 4.5f : 3f;
+                    foreach (var w in Shot(names[c] + "_a")) yield return w;
+                    yield return c == 3 ? 6f : 3f;
+                    if (ending != null && ending.Chapter == c) foreach (var w in Shot(names[c] + "_b")) yield return w;
+                    if (c == 2) citizensReacted = System.Array.Exists(Object.FindObjectsByType<Actor>(FindObjectsSortMode.None), a => a.Talked);
+                    if (c == 5) fireworks = Object.FindAnyObjectByType<Fireworks>()?.Active == true;
+                }
+                Check(citizensReacted, "citizens notice and thank the hero in the walk");
+                Check(fireworks, "fireworks fill the sky in the finale");
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneCompletion, 90f)) yield return w;
+                Time.timeScale = 1f;
+                EndingController.AutoWalk = false;
+                Check(SceneManager.GetActiveScene().name == DH.SceneCompletion, "the ending fades into the completion screen");
+                Check(SaveSystem.Data.endingSeen, "the ending is saved as seen");
+                yield return 2f;
+                var st = CompletionController.Read();
+                Check(st.award && st.levelsCleared == LevelCatalog.All.Count && st.score > 0,
+                    $"completion stats: award {st.award}, levels {st.levelsCleared}/{st.levels}, score {st.score}, fragments {st.fragments}, deaths {st.deaths}");
+                foreach (var w in Shot("36_completion")) yield return w;
+                foreach (var label in new[] { "PLAY AGAIN", "REPLAY ENDING", "MAIN MENU", "CREDITS", "QUIT" })
+                    Check(GameObject.Find(label)?.GetComponent<UnityEngine.UI.Button>() != null, $"completion screen has {label}");
+                GameObject.Find("CREDITS").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneCredits, 6f)) yield return w;
+                yield return 2.5f;
+                var credits = CreditsController.Compose();
+                Check(SceneManager.GetActiveScene().name == DH.SceneCredits && Object.FindAnyObjectByType<CreditsController>() != null && credits.Contains("GAME DEVELOPMENT") && credits.Contains("Abenezer Ghiday") && credits.Contains("Kenney"),
+                    "credits list the team file and every third-party credit");
+                foreach (var w in Shot("37_credits")) yield return w;
+                var back = System.Array.Find(Object.FindObjectsByType<UnityEngine.UI.Button>(FindObjectsSortMode.None),
+                    b => b.GetComponentInChildren<TMPro.TextMeshProUGUI>()?.text == "BACK TO MAIN MENU");
+                Check(back != null, $"credits screen has BACK TO MAIN MENU (scene {SceneManager.GetActiveScene().name})");
+                back?.onClick.Invoke();
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneMainMenu, 6f)) yield return w;
+                yield return 2f;
+                Check(GameObject.Find("MissionReport") != null, "after the campaign the home page offers MISSION REPORT");
+                GameObject.Find("MissionReport").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneCompletion, 6f)) yield return w;
+                yield return 1.5f;
+                GameObject.Find("REPLAY ENDING").GetComponent<UnityEngine.UI.Button>().onClick.Invoke();
+                foreach (var w in Until(() => SceneManager.GetActiveScene().name == DH.SceneEnding, 6f)) yield return w;
+                yield return 2f;
+                Check(Object.FindAnyObjectByType<EndingController>()?.Chapter == 0, "REPLAY ENDING plays the ending from the start");
+            }
+            Time.timeScale = 1f;
+            EndingController.AutoWalk = false;
 
             // --- pure sim: missing a fragment must never soft-lock the run
             var lvl3 = LevelData.Load("level03");

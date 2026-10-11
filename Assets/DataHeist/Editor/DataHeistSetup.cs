@@ -23,6 +23,9 @@ namespace DataHeist.EditorTools
             CreateMainMenuScene();
             CreateStoryScene();
             foreach (var l in LevelCatalog.All) if (l.number > 1) CreateLevelScene(l.id, l.scene);
+            CreateControllerScene<EndingController>(DH.SceneEnding, "Ending");
+            CreateControllerScene<CompletionController>(DH.SceneCompletion, "Completion");
+            CreateControllerScene<CreditsController>(DH.SceneCredits, "Credits");
             AddScenesToBuild();
             EditorUtility.DisplayDialog("The Data Heist",
                 "Setup complete.\n\n- Pixel art re-imported\n- Character definitions created\n- Home page, Story, Character Select, Level 1 and Level 2 in Build Settings\n\nOpen Assets/DataHeist/Scenes/MainMenu and press Play.",
@@ -79,6 +82,18 @@ namespace DataHeist.EditorTools
 
         const string LegacyMainMenu = "Assets/Scenes/MainMenuScreenScene.unity";
 
+        /// <summary>Creates a scene holding one GameObject with the given controller (if it doesn't exist yet).</summary>
+        public static void CreateControllerScene<T>(string sceneName, string objectName) where T : Component
+        {
+            string path = ScenesDir + sceneName + ".unity";
+            if (File.Exists(path)) return;
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            new GameObject(objectName).AddComponent<T>();
+            EditorSceneManager.SaveScene(scene, path);
+            Debug.Log("[DataHeist] Created " + path);
+        }
+
         /// <summary>Creates a level scene: one GameObject with a LevelController set to that level id.</summary>
         public static void CreateLevelScene(string levelId, string sceneName)
         {
@@ -124,6 +139,9 @@ namespace DataHeist.EditorTools
             Ensure(ScenesDir + DH.SceneLevel01 + ".unity", 3);
             Ensure(ScenesDir + DH.SceneLevel02 + ".unity", 4);
             Ensure(ScenesDir + DH.SceneLevel03 + ".unity", 5);
+            Ensure(ScenesDir + DH.SceneEnding + ".unity", 6);
+            Ensure(ScenesDir + DH.SceneCompletion + ".unity", 7);
+            Ensure(ScenesDir + DH.SceneCredits + ".unity", 8);
             EditorBuildSettings.scenes = scenes.ToArray();
             Debug.Log("[DataHeist] Build Settings: " + string.Join(", ", scenes.Select(s => Path.GetFileNameWithoutExtension(s.path))));
         }
@@ -160,6 +178,14 @@ namespace DataHeist.EditorTools
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             EditorSceneManager.OpenScene(ScenesDir + DH.SceneLevel03 + ".unity");
+            EditorApplication.isPlaying = true;
+        }
+
+        [MenuItem("Data Heist/Play Ending", priority = 14)]
+        public static void PlayEnding()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EditorSceneManager.OpenScene(ScenesDir + DH.SceneEnding + ".unity");
             EditorApplication.isPlaying = true;
         }
 

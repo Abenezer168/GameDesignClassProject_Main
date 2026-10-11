@@ -59,6 +59,7 @@ namespace DataHeist
                 return new Vector2(0.5f, 0f);
             if (path.StartsWith("Tiles")) return new Vector2(0f, 1f);
             if (path.StartsWith("Story/tower")) return new Vector2(0.5f, 0f);
+            if (path.StartsWith("Ending")) return new Vector2(0.5f, 0f);   // ending props and people stand on the ground
             if (path.StartsWith("Story/searchlight")) return new Vector2(0.5f, 1f);
             if (path.StartsWith("Parallax")) return new Vector2(0f, 0f);
             return new Vector2(0.5f, 0.5f);

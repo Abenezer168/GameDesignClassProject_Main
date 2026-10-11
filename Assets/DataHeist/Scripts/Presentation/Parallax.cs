@@ -36,6 +36,17 @@ namespace DataHeist
 
         bool Vault => _theme == "vault";
 
+        /// <summary>Tints the whole backdrop (sky, skyline layers, rain); the ending uses it to turn the city from oppressive red to free neon.</summary>
+        public void SetTint(Color sky, Color layers)
+        {
+            if (_sky != null) _sky.color = sky;
+            if (_layers != null) foreach (var l in _layers) if (l.sr != null) l.sr.color = layers;
+            if (_drops != null) foreach (var d in _drops) d.color = new Color(layers.r, layers.g, layers.b, 0.6f);
+        }
+
+        /// <summary>Hides or shows the rain (the ending's finale clears the sky).</summary>
+        public void SetRain(bool on) { if (_rain != null) _rain.gameObject.SetActive(on); }
+
         void Build()
         {
             string pre = Vault ? "vault_" : "city_";

@@ -24,6 +24,9 @@ namespace DataHeist
         public const string SceneLevel02 = "Level02_CorporateDistrict";
         public const string SceneLevel03 = "Level03_UndergroundVault";
         public const string SceneStory = "StoryScene";
+        public const string SceneEnding = "EndingScene";
+        public const string SceneCompletion = "CompletionScene";
+        public const string SceneCredits = "CreditsScene";
 
         // Sorting orders (single sorting layer keeps setup zero-config)
         public const int SortSky = -200, SortFar = -190, SortMid = -180, SortNear = -170;

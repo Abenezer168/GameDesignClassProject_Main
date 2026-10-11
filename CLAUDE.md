@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 There is no CLI build/lint/test pipeline; work happens in the Unity Editor via the **Data Heist** menu (`Assets/DataHeist/Editor/DataHeistSetup.cs`):
 - **Data Heist > Setup Project** — first run after pulling: pixel-art reimport (32 PPU, point filter, no compression), creates `CharacterDefinition` assets, adds scenes to Build Settings, wires Main Menu Play.
-- **Data Heist > Play Level 1 / Play Level 2 / Play Story** — jump straight into a scene.
+- **Data Heist > Play Level 1 / 2 / 3 / Play Story / Play Ending** — jump straight into a scene.
 - **Data Heist > Validate Level 1 / Level 2 (Playtest Bot)** — the closest thing to a test suite. Beam-searches inputs through the real `RunnerSim` and must find a zero-hit, no-ability clear for every runner. Run it after any change to `RunnerSim` or the level JSON.
 - **Data Heist > Debug > Unlock All Runners + 1000 Bytes** / **Reset Save Data**.
 - **Data Heist > Debug > Smoke Test**: a play-mode run through the title screen, Settings, all story shots, Character Select and Level 1. It fails on any console error and writes screenshots to `Logs/Screens/`.
@@ -65,6 +65,10 @@ cd Tools/WebPrototype && node bot.js ../../Assets/DataHeist/Resources/DataHeist/
 **Menus and story.** The title screen (`MainMenuController`), Character Select and the story intro (`Scripts/Story/`, StoryScene) are all built at runtime with `UIKit`. They share `MenuBackdrop` and `Parallax` for the city, `ScreenFX` for the vignette and scanlines, and `SceneFader.Load` for transitions. Story shots are `StoryShot` subclasses staged side by side along x, and story art comes from `gen_story.py`. Overlay-canvas UI can't be positioned with `WorldToScreenPoint` in tests, so world-pinned UI uses viewport maths.
 
 **Levels and hazards.** `LevelCatalog` lists the campaign in order (id, scene, name). A level unlocks when the previous id is in `SaveData.cleared`, and the results screen offers NEXT LEVEL. Each level scene is one GameObject: a `LevelController` with a serialized `levelId`. Level 2's hazards (`sniper`, `shock`, `sign`) live in `RunnerSim.UpdateLevel2`, and Level 3's (`turret`, cycling lasers, `press`, patrol drones) in `UpdateLevel3`. The Level 3 boss (`UpdateBoss`/`HitBoss`) freezes forward speed via `ArenaBoss`. Fragments, the `vault` door (a vault failure respawns before the first missed fragment) and the lockdown `escapeT` live in the sim too. They are triggered by distance, never by clock time, so retries stay deterministic. New `SimEventType` values go at the end of the enum, and `EntityViews` / `LevelController.HandleEvents` render them. `Tools/WebPrototype/sim.js` has **not** been ported for Level 2.
+
+**Ending.** `Scripts/Ending/`: `EndingController` (+ `EndingChapters.cs`, a partial class) directs 6 coroutine chapters. They run through `Skippable`, which steps nested IEnumerators by hand, so SKIP can cut anywhere. Chapters must yield IEnumerators or null, **not** `WaitForSeconds`, so that `Time.timeScale` speeds them up in tests. Then come `CompletionController` and `CreditsController`. Level 3's `Win` loads EndingScene instead of showing results.
+
+**A MonoBehaviour saved in a scene must live in a .cs file with the same name.** Otherwise the scene stores a missing script with no error in batch logs; that happened to `CreditsController`. Runtime-only helpers (`Confetti`, `MenuItemFx`) can share files.
 
 **Serialized fields go stale.** Scene files keep old values of public MonoBehaviour fields (this bit `StoryController` and `CharacterSelectController`). Prefer `const`s or catalog lookups for flow and tuning that shouldn't be per-scene.
 

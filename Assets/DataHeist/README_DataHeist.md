@@ -170,6 +170,30 @@ Level 3 unlocks when Level 2 is cleared (NEXT LEVEL on Level 2's results, or the
 
 **Validation:** **Data Heist > Validate Level 3 (Playtest Bot)**. Every runner clears it with zero hits and no abilities. Each run collects all 3 fragments, slashes back the 9 shots that destroy the Guardian, and finishes the escape. The bot reports the turret shots, laser cycles, press slams and Guardian attacks it survived.
 
+## The ending, completion screen and credits
+
+Clearing Level 3's escape skips the results screen and goes through the loading screen into **EndingScene**. `EndingController` directs six chapters, built at runtime from the game's own sprites under the night-city parallax. **ESC / SKIP SCENE** skips the current chapter.
+
+| Chapter | What happens |
+|---|---|
+| 1. The Truth Is Revealed | Giant screens across the skyline switch to the leaked Halcyon files. Citizens react, the drones lose power and fall, and the tower's red beacon and searchlights die. Ends on "The truth can no longer be hidden." |
+| 2. The City Transforms | BEFORE: shuttered shops, red lamps, a drone patrol, an "OBEY / HALCYON SEES ALL" billboard and people hurrying home. Then a wave of light sweeps the street: shops open, lamps turn warm, the billboard reads "FREE CITY", drones fly off, and the sky changes from red to neon. AFTER: shopkeepers wave from their doors, families walk, a tram and flying cars pass, and bunting and string lights go up |
+| 3. The Hero Returns | **Playable.** Walk with LEFT/RIGHT (A/D, stick or d-pad) and wave with the attack key. Citizens turn, wave or cheer and speak one at a time ("You saved our city!", "Thank you for exposing the truth!", "We are finally free!", "You're our hero!"...). Waving makes everyone nearby cheer. If you stop for 10 s, the hero strolls on, so the scene never blocks |
+| 4. The Award Ceremony | The hero walks up onto the stage. The mayor welcomes them, the crowd cheers and the mayor gives the speech, then presents the medal. A **GUARDIAN OF THE CITY** award card plays (rotating gold rays and the medal). Then the handshake under camera flashes, applause and confetti |
+| 5. The Statue | "Words are not enough..." Everyone turns to the covered statue, the cloth lifts, and a bronze statue of *your* runner is revealed. Then the crowd cheers, the camera pushes in, and the plaque reads "In honor of the hero who restored freedom and revealed the truth." |
+| 6. The City Is Free | Your runner stands on a rooftop over the free skyline while fireworks fill the sky. Then "THE CITY IS FREE", "The data was stolen. The truth was restored. The future belongs to the people.", and "THANK YOU FOR PLAYING THE DATA HEIST" |
+
+- **Building blocks:** `CinematicUI` (letterbox, typewriter captions, speaker dialogue with the mayor's portrait, title cards, award card, speech bubbles, SKIP), `Actor` (citizens, the mayor and the hero), and `Fireworks` / `Confetti` (pooled particles). Chapters are coroutines in `EndingChapters.cs`. This is plain coroutine direction rather than Unity Timeline, which matches the code-built scenes everywhere else.
+- **Art:** `gen_ending_art.py` draws it all. People use the runners' own skeleton renderer: 8 citizens, 2 children, the mayor (with a portrait), and the hero's walk, wave and handshake poses. Props: shops in closed and open states, red and warm lamps, both billboards, evidence screens, tram, flying cars, bunting, string lights, stage, podium, banner, medal, pedestal, cloth and bronze statues.
+- **Music, one mood per chapter (CC0):** Bittersweet, Silver Lining, Feel Good Summer Tune, Triumphant (ceremony and statue), and Ending Scene (finale).
+- **Sound (CC0):** crowd applause (expl0it3r) and firework bangs (rubberduck).
+
+**CompletionScene** (MISSION COMPLETE) shows the Guardian of the City award and a campaign report, all read from the save: final score (the sum of best scores), data fragments, levels completed, total deaths and completion time. The buttons are PLAY AGAIN, REPLAY ENDING, MAIN MENU, CREDITS and QUIT. Once the award is earned, the home page shows **MISSION REPORT** under the wallet, so the report and the ending can be replayed any time.
+
+**CreditsScene** scrolls the credits; hold ENTER to speed up, and ESC or BACK returns to the menu. **Edit `Resources/DataHeist/Credits/team.txt`** to put in your team's real names; the placeholders are marked `[...]`, and the only name filled in is the repository's git author. Third-party credits are appended automatically.
+
+Saved progress: `SaveData.guardianAward`, `endingSeen`, `totalDeaths`, `totalPlayTime` and `LevelRecord.fragments` (alongside `cleared` and `records`). Shortcut: **Data Heist > Play Ending**.
+
 ## Audio
 
 All sound is real, CC0-licensed (public domain) audio. Credits appear in-game under **Options > Credits** and in `Resources/DataHeist/Audio/CREDITS.txt`.

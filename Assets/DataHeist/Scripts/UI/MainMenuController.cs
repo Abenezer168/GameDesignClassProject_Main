@@ -205,6 +205,14 @@ namespace DataHeist
             _bestText = UIKit.Text("Best", card.rectTransform, "", 5, DH.Dim);
             _bestText.rectTransform.Place(new Vector2(0, 1), new Vector2(0, 1), new Vector2(10, -26), new Vector2(150, 10));
             RefreshProgress();
+            if (SaveSystem.Data.guardianAward)
+            {
+                // the campaign is done: the mission report (stats, replay the ending, credits)
+                var report = UIKit.Button("MissionReport", menu, "MISSION REPORT  >", () => SceneFader.Load(DH.SceneCompletion), false);
+                report.GetComponent<RectTransform>().Place(new Vector2(1, 1), new Vector2(1, 1), new Vector2(-16, -66), new Vector2(170, 16));
+                report.GetComponentInChildren<TextMeshProUGUI>().fontSize = 6;
+                var rn = report.navigation; rn.mode = Navigation.Mode.None; report.navigation = rn;
+            }
 
             _hint = UIKit.Text("Hint", menu, "UP/DOWN  NAVIGATE      ENTER  SELECT", 5, new Color(1, 1, 1, 0.45f));
             _hint.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(34, 16), new Vector2(300, 10));

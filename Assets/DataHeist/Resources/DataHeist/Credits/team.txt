@@ -1,0 +1,26 @@
+# The Data Heist credits. Edit freely: a line starting with '#' is a comment, '## ' starts a section,
+# every other line is a name or credit. Third-party audio credits are appended automatically from
+# Audio/CREDITS.txt (written by Tools/DataHeistGenerators/build_audio.py).
+
+## GAME DEVELOPMENT
+Abenezer Ghiday
+[Teammate name]
+[Teammate name]
+
+## GAME DESIGN
+[Name]
+
+## PROGRAMMING
+[Name]
+
+## ART AND ANIMATION
+[Name]
+Pixel art and backgrounds generated with the team's Python tools (Tools/DataHeistGenerators)
+
+## MUSIC AND SOUND
+[Name]
+
+## SPECIAL THANKS
+[Instructor name]
+Game Design and Development class
+Kenney.nl and the OpenGameArt.org community

@@ -498,6 +498,15 @@ namespace DataHeist
                 $"TIME         <color=#2ff3ff>{DH.FormatTime(Sim.time)}</color>\n" +
                 $"SCORE        <color=#2ff3ff>{score}</color>{(best ? "  <color=#ffd23a>NEW BEST</color>" : "")}";
             _paused = true;
+            if (!next.HasValue && s.evidence)
+            {
+                // the final mission: no results screen, the escape rolls straight into the ending
+                AudioManager.I.StopMusic();
+                _hud.Flash(0.6f);
+                yield return new WaitForSecondsRealtime(1.2f);
+                LoadingScreen.Run(DH.SceneEnding, null, sceneLabel: "THE FILES GO PUBLIC");
+                yield break;
+            }
             _menus.ShowResults(rank, rows, unlocks.ToString(), data.bytes, next.HasValue ? next.Value.name : null);
         }
 

@@ -30,6 +30,13 @@ PACKS = {   # Kenney, CC0 - https://kenney.nl
     'impact': 'https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip',
     'ui': 'https://kenney.nl/media/pages/assets/interface-sounds/fa43c1dd4d-1677589452/kenney_interface-sounds.zip',
     'digital': 'https://kenney.nl/media/pages/assets/digital-audio/216eac4753-1677590265/kenney_digital-audio.zip',
+    # OpenGameArt, CC0: "25 CC0 bang / firework SFX" by rubberduck
+    'fireworks': 'https://opengameart.org/sites/default/files/25-CC0-bang-sfx.zip',
+}
+
+FILES = {   # single CC0 files from OpenGameArt, used like a one-file pack: L('applause', 'applause')
+    'applause': ('https://opengameart.org/sites/default/files/applause-clapping-church-crowd-immersive.wav',
+                 'expl0it3r', 'Applause in a large hall'),
 }
 
 MUSIC = {   # OpenGameArt, CC0. (file name in game, url, seconds to skip, author, title)
@@ -42,11 +49,20 @@ MUSIC = {   # OpenGameArt, CC0. (file name in game, url, seconds to skip, author
     'music_level03': ('https://opengameart.org/sites/default/files/darkcity.wav', 0.0, 'cinameng', 'Dark City'),
     'music_boss': ('https://opengameart.org/sites/default/files/boss_fight_2.ogg', 0.0, 'ansimuz', 'Boss Fight 2'),
     'music_escape': ('https://opengameart.org/sites/default/files/die_hardv1.ogg', 0.0, 'centurionofwar', 'Die Hard Battle'),
+    # the ending: one mood per chapter
+    'music_truth': ('https://opengameart.org/sites/default/files/bittersweet.mp3', 0.0, 'emmama', 'Bittersweet'),
+    'music_hope': ('https://opengameart.org/sites/default/files/silver_lining_2025_loop.ogg', 0.0, 'bobjt', 'Silver Lining'),
+    'music_celebrate': ('https://opengameart.org/sites/default/files/feel_good_summer_tune.ogg', 0.0, 'skrjablin', 'Feel Good Summer Tune'),
+    'music_ceremony': ('https://opengameart.org/sites/default/files/triumphant.mp3', 0.0, 'emmama', 'Triumphant'),
+    'music_finale': ('https://opengameart.org/sites/default/files/ending_scene_orchestral.wav', 0.0, 'nene', 'Ending Scene'),
+    'music_credits': ('https://opengameart.org/sites/default/files/the_world_is_ours.mp3', 0.0, 'zane-little-music', 'The World Is Ours'),
 }
 
 CREDITS = [
     'Sound effects: Kenney (kenney.nl) - Sci-Fi Sounds, Impact Sounds, Interface Sounds, Digital Audio (CC0)',
-] + [f'Music: "{t}" by {a} (OpenGameArt.org, CC0)' for (_, _, a, t) in MUSIC.values()]
+    'Sound effects: "25 CC0 bang / firework SFX" by rubberduck (OpenGameArt.org, CC0)',
+] + [f'Sound effects: "{t}" by {a} (OpenGameArt.org, CC0)' for (_, a, t) in FILES.values()] \
+  + [f'Music: "{t}" by {a} (OpenGameArt.org, CC0)' for (_, _, a, t) in MUSIC.values()]
 
 # name -> list of layers: (pack, file stem, gain, offset seconds, options)
 #   options: slice=(start, end) seconds, lowpass=Hz, pitch=ratio
@@ -89,6 +105,19 @@ SFX = {
     'boss_orb':    [L('digital', 'zap2', 0.8), L('scifi', 'laserSmall_003', 0.4)],
     'boss_hit':    [L('impact', 'impactMetal_heavy_003'), L('scifi', 'explosionCrunch_001', 0.7, 0.0, slice=(0.0, 0.35)), L('ui', 'glitch_001', 0.6)],
     'boss_explode': [L('scifi', 'explosionCrunch_004'), L('scifi', 'lowFrequency_explosion_000', 0.9)],
+    # the ending
+    'crowd_cheer': [L('applause', 'applause', 1.0, 0.0, slice=(0.3, 3.8))],
+    'applause':    [L('applause', 'applause', 1.0, 0.0, slice=(4.0, 8.0))],
+    'firework_launch': [L('fireworks', 'shot_01', 0.8)],
+    'firework_1':  [L('fireworks', 'fw_01')],
+    'firework_2':  [L('fireworks', 'fw_03')],
+    'firework_3':  [L('fireworks', 'fw_05')],
+    'medal':       [L('digital', 'powerUp1'), L('ui', 'confirmation_002', 0.6, 0.3)],
+    'reveal':      [L('scifi', 'forceField_001', 0.7, 0.0, slice=(0.0, 0.5)), L('digital', 'threeTone1', 0.6, 0.25)],
+    'screens_on':  [L('ui', 'glitch_002'), L('scifi', 'computerNoise_001', 0.6, 0.0, slice=(0.0, 0.8))],
+    'power_down':  [L('digital', 'lowDown'), L('scifi', 'spaceEngineLow_000', 0.5, 0.0, slice=(0.0, 0.9), pitch=0.6)],
+    'transform':   [L('digital', 'phaserUp7', 0.8, pitch=0.6), L('digital', 'zapThreeToneUp', 0.5, 0.2)],
+    'npc_talk':    [L('ui', 'select_002', 0.8)],
     # pickups and level objects
     'byte':        [L('digital', 'pepSound3', 0.9)],
     'repair':      [L('digital', 'powerUp11')],
@@ -141,6 +170,9 @@ _index = {}
 
 
 def find(pack, stem):
+    if pack in FILES:
+        url = FILES[pack][0]
+        return fetch(url, os.path.join(CACHE, 'files', os.path.basename(url)))
     if pack not in _index:
         idx = {}
         for dp, _, files in os.walk(pack_dir(pack)):
