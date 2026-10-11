@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 RES = sys.argv[1]
 OUT = sys.argv[2]
-FONT = '/home/claude/fonts/pressstart2p_PressStart2P-Regular.ttf'
+FONT = os.path.join(RES, 'Fonts/PressStart2P-Regular.ttf')
 L = json.load(open(os.path.join(RES, 'Levels/level01.json')))
 PPU = 32
 ROWS = 4

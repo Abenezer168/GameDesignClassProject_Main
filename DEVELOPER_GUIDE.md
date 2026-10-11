@@ -1,6 +1,6 @@
-# CLAUDE.md
+# Developer Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+How the project is laid out, how to build and test it, and the conventions to follow when changing it.
 
 ## Project
 

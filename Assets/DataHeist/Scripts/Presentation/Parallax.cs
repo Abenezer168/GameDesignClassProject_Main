@@ -4,7 +4,7 @@ namespace DataHeist
 {
     /// <summary>
     /// Night-city backdrop: sky glued to the camera, three skyline layers scrolling at
-    /// different rates, plus screen-space rain. Optional: the team's Gemini skyline as the far layer.
+    /// different rates, plus screen-space rain.
     /// </summary>
     public class Parallax : MonoBehaviour
     {
