@@ -79,3 +79,6 @@ __pycache__/
 
 # downloaded CC0 audio sources (build_audio.py fetches them)
 Tools/DataHeistGenerators/.audio_cache/
+
+# macOS Finder files
+.DS_Store
