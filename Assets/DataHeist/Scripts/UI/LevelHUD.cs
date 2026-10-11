@@ -17,7 +17,8 @@ namespace DataHeist
         Canvas _canvas;
         readonly List<Image> _hearts = new List<Image>();
         Sprite _heartFull, _heartEmpty;
-        TextMeshProUGUI _bytes, _timer, _pct, _abilityName, _abilityKey, _controls, _countdown, _countSub;
+        TextMeshProUGUI _bytes, _timer, _pct, _abilityName, _abilityKey, _controls, _countdown, _countSub, _countBrief;
+        Image _countBriefBg;
         Image _shard, _progressFill, _abilityIcon, _abilityCover, _abilityFrame;
         RectTransform _progressBar;
         readonly List<(Image img, SimEntity e)> _cpTicks = new List<(Image, SimEntity)>();
@@ -139,6 +140,13 @@ namespace DataHeist
             _countdown.outlineWidth = 0.2f; _countdown.outlineColor = new Color32(18, 10, 26, 255);
             _countSub = UIKit.Text("CountSub", root, "", 8, DH.Amber, TextAlignmentOptions.Center);
             _countSub.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -24), new Vector2(560, 14));
+            // mission briefing: a dark caption plate (drawn first, so behind) and two centred lines
+            _countBriefBg = UIKit.Image("CountBriefingBg", root, new Color(0.04f, 0.02f, 0.09f, 0.8f));
+            _countBriefBg.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -50), new Vector2(404, 34));
+            _countBriefBg.gameObject.SetActive(false);
+            _countBrief = UIKit.Text("CountBriefing", root, "", 6, DH.Ink, TextAlignmentOptions.Center);
+            _countBrief.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -50), new Vector2(380, 30));
+            _countBrief.lineSpacing = 30;
         }
 
         public void RefreshControls()
@@ -152,11 +160,19 @@ namespace DataHeist
 
         public void SetCountdown(float remaining, bool firstRun, LevelData L)
         {
-            if (remaining <= 0) { _countdown.text = ""; _countSub.text = ""; return; }
+            if (remaining <= 0) { _countdown.text = ""; _countSub.text = ""; SetBriefing(""); return; }
             int c = Mathf.CeilToInt(remaining - 0.2f);
             _countdown.text = c > 0 ? c.ToString() : "RUN!";
             _countdown.color = c > 0 ? DH.Cyan : DH.Pink;
-            _countSub.text = firstRun && remaining > 1 ? $"{L.name}  -  {L.subtitle.ToUpperInvariant()}" : "";
+            bool intro = firstRun && remaining > 1;
+            _countSub.text = intro ? $"{L.name}  -  {L.subtitle.ToUpperInvariant()}" : "";
+            SetBriefing(intro ? LevelCatalog.Get(L.id).briefing ?? "" : "");
+        }
+
+        void SetBriefing(string text)
+        {
+            _countBrief.text = text;
+            _countBriefBg.gameObject.SetActive(text.Length > 0);
         }
 
         void BuildLevel3(RectTransform root)

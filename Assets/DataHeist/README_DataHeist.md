@@ -38,6 +38,7 @@ The home page is `Assets/DataHeist/Scenes/MainMenu`. It replaces the team's old 
 - **Skip:** Esc or pad Start.
 - The intro plays after the first key press on first launch (`SaveData.storySeen`) and returns to the home page. It can always be replayed from STORY.
 - Each shot is a small `StoryShot` class in `Scripts/Story/StoryShots.cs`. To change the story, edit the captions in `StoryController.Start`; to add a shot, write another `StoryShot` subclass.
+- The story carries on between levels: each level's first countdown shows a one-line **mission briefing** under its name (`LevelCatalog` `briefing`). Shard 1 exposes a payroll of bribed officials, which leads to Shard 2 in the Corporate District, and the shards then unlock the archive vault in Level 3, whose evidence the ending leaks to the city.
 - Editor shortcuts: **Data Heist > Play Story** and **Data Heist > Create Story Scene**. **Setup Project** also creates the scene.
 
 ## Controls (GDD, all remappable in Pause → Controls)

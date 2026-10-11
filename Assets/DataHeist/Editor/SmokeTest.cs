@@ -356,6 +356,9 @@ namespace DataHeist.EditorTools
             foreach (var w in Until(() => Object.FindAnyObjectByType<LevelController>() != null, 10f)) yield return w;
             yield return 1.0f;
             AudioAudit("level 1 countdown", 0);
+            var brief = GameObject.Find("CountBriefing")?.GetComponent<TMPro.TextMeshProUGUI>();
+            Check(brief != null && brief.text == LevelCatalog.Get("level01").briefing, "the first countdown shows the Level 1 mission briefing");
+            foreach (var w in Shot("07c_level01_briefing")) yield return w;
             yield return 4.5f;
             var level = Object.FindAnyObjectByType<LevelController>();
             Check(level != null && level.Sim != null, "level 1 running");

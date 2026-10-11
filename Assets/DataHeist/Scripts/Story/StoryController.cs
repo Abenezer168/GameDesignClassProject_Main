@@ -60,14 +60,14 @@ namespace DataHeist
             AddShot<ShotTower>("HALCYON CORP",
                 "Halcyon Corp owns the power grid, the police drones and every byte of data anyone ever made. Yours included.");
             AddShot<ShotVault>("THE SHARDS",
-                "Deep in its vaults sit five Data Shards: the master keys to the city's memory. Whoever holds them owns Sector 7.");
+                "Deep in its vaults sit five Data Shards: the city's memory, and the proof of everything Halcyon has buried.");
             AddShot<ShotCourier>("THE COURIER",
-                "Kai Okafor runs packages across the rooftops. Fastest courier in the sector. Tonight a stranger paid him to run something else.");
+                "Kai Okafor runs packages across the rooftops. Fastest courier in the sector. Tonight a stranger paid him to steal the truth.");
             _shots[_shots.Count - 1].portrait = "kai";
             AddShot<ShotCrew>("THE CREW",
                 "He can't do it alone. Nova runs. Jax breaks. Lin vanishes. Together they can crack a vault no one has ever cracked.");
             AddShot<ShotRun>("THE HEIST",
-                "One shard. One rooftop run. Get in, grab it and reach extraction before Halcyon knows you were ever there.");
+                "Three shards, then the archive vault. Get the proof out to every screen in the city before Halcyon locks it down.");
             BuildPips();
             AudioManager.I.MusicOr("music_story", "music_menu");
             SceneFader.FadeIn(0.8f);

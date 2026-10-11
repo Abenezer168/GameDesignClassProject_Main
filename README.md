@@ -26,7 +26,7 @@ This is a Geometry Dash-style 2D autorunner we're building for our Game Design a
 All keys can be changed in **Pause > Controls** or **Options > Controls**. You win a level by reaching the extraction point, and you lose when your health hits zero or you fall. After a loss you can **retry from the last checkpoint**, restart or quit. Data Bytes you collected are always kept.
 
 ## Story intro
-On first launch a six-shot cinematic story plays: the Sector 7 skyline, the Halcyon tower, the Data Shard vault, Kai and the job offer, the crew line-up and the rooftop run. You can replay it any time from **STORY** on the home page.
+On first launch a six-shot cinematic story plays: the Sector 7 skyline, the Halcyon tower, the Data Shard vault, Kai and the job offer, the crew line-up and the rooftop run. The shards hold the proof of everything Halcyon has buried, so the crew's real job is to steal the truth and leak it. You can replay the intro any time from **STORY** on the home page. Between levels, each level's first countdown shows a one-line **mission briefing** that moves the story on: Shard 1 exposes a payroll of bribed officials, which leads to the Corporate District, and the shards then unlock Halcyon's archive vault.
 
 ## Level 1 + Runners (Data Heist update)
 * **Level 1 "Neon Rooftops"** (580 m, about 75 s): a full auto-runner level that teaches jump, slide, attack and the runner's ability. It has gaps, billboards, Security Drones, Gunner drones, lasers, jump pads, a catwalk bonus route, 2 checkpoints, an alarm-zone finale, the Data Shard and the extraction point.
