@@ -201,12 +201,19 @@ namespace DataHeist
             var sr = Rect("Slider", row);
             sr.anchorMin = new Vector2(0, 0.5f); sr.anchorMax = new Vector2(1, 0.5f);
             sr.offsetMin = new Vector2(labelWidth + 10, -4); sr.offsetMax = new Vector2(-40, 4);
+            // Image() turns raycasts off, which left the bar unclickable; an invisible strip taller than
+            // the 8px track catches clicks and drags (they bubble up to the Slider)
+            var hit = Image("Hit", sr, new Color(1, 1, 1, 0));
+            hit.rectTransform.Stretch();
+            hit.rectTransform.offsetMin = new Vector2(-4, -4); hit.rectTransform.offsetMax = new Vector2(4, 4);
+            hit.raycastTarget = true;
             var bg = Image("Bg", sr, DH.PurpleLine); bg.rectTransform.Stretch();
             var fillArea = Rect("FillArea", sr).Stretch();
             var fill = Image("Fill", fillArea, DH.Pink); fill.rectTransform.Stretch();
             var handleArea = Rect("HandleArea", sr).Stretch();
             var handle = Image("Handle", handleArea, Color.white);
             handle.rectTransform.sizeDelta = new Vector2(6, 12);
+            handle.raycastTarget = true;
             var s = sr.gameObject.AddComponent<Slider>();
             s.fillRect = fill.rectTransform;
             s.handleRect = handle.rectTransform;

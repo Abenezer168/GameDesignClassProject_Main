@@ -93,6 +93,28 @@ namespace DataHeist.EditorTools
             else Errors.Add("[SmokeTest] FAIL " + what);
         }
 
+        /// <summary>Screen point at fraction t (0..1) along a slider's bar, at its vertical middle.</summary>
+        static Vector2 SliderPoint(UnityEngine.UI.Slider s, float t)
+        {
+            var rt = (RectTransform)s.transform;
+            var c = new Vector3[4];
+            rt.GetWorldCorners(c);   // bottom-left, top-left, top-right, bottom-right
+            var world = Vector3.Lerp((c[0] + c[1]) * 0.5f, (c[2] + c[3]) * 0.5f, t);
+            var canvas = s.GetComponentInParent<Canvas>().rootCanvas;
+            var cam = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+            return RectTransformUtility.WorldToScreenPoint(cam, world);
+        }
+
+        /// <summary>The topmost UI raycast hit at a screen point, as the EventSystem would pick for a click.</summary>
+        static UnityEngine.EventSystems.RaycastResult PointerHit(Vector2 screen)
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es == null) return default;
+            var hits = new List<UnityEngine.EventSystems.RaycastResult>();
+            es.RaycastAll(new UnityEngine.EventSystems.PointerEventData(es) { position = screen }, hits);
+            return hits.Count > 0 ? hits[0] : default;
+        }
+
         // ------------------------------------------------------------------ screenshots
         // Overlay canvases are invisible to Camera.Render, so for a capture they are switched to
         // camera space for one frame. Shots land in Logs/Screens (gitignored).
@@ -238,6 +260,30 @@ namespace DataHeist.EditorTools
                 foreach (var w in Shot("02_options_audio")) yield return w;
                 if (master != null) master.value = oldMaster;
                 if (music != null) music.value = oldMusic;
+
+                // the mouse must reach the bars too (their images once had raycasts off, so clicks did nothing)
+                var sfxSlider = System.Array.Find(sliders, x => x.transform.parent.name == "SOUND FX");
+                foreach (var s in new[] { master, music, sfxSlider })
+                {
+                    if (s == null) { Check(false, "audio slider missing"); continue; }
+                    var hit = PointerHit(SliderPoint(s, 0.5f));
+                    var target = hit.gameObject != null ? UnityEngine.EventSystems.ExecuteEvents.GetEventHandler<UnityEngine.EventSystems.IPointerDownHandler>(hit.gameObject) : null;
+                    Check(target == s.gameObject, $"mouse reaches the {s.transform.parent.name} slider (hit {(hit.gameObject != null ? hit.gameObject.name : "nothing")})");
+                }
+                if (sfxSlider != null)
+                {
+                    float oldSfx = SaveSystem.Data.sfxVolume;
+                    var pos = SliderPoint(sfxSlider, 0.25f);
+                    var ped = new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                    {
+                        position = pos, pressPosition = pos, button = UnityEngine.EventSystems.PointerEventData.InputButton.Left,
+                        pointerPressRaycast = PointerHit(pos), pointerCurrentRaycast = PointerHit(pos),
+                    };
+                    UnityEngine.EventSystems.ExecuteEvents.ExecuteHierarchy(ped.pointerPressRaycast.gameObject, ped, UnityEngine.EventSystems.ExecuteEvents.pointerDownHandler);
+                    yield return 0.1f;
+                    Check(Mathf.Abs(SaveSystem.Data.sfxVolume - 0.25f) < 0.05f, $"clicking a quarter along SOUND FX sets it to {SaveSystem.Data.sfxVolume:F2}");
+                    sfxSlider.value = oldSfx;
+                }
                 settings.SendMessage("ShowTab", 1);
                 foreach (var w in Shot("03_options_video")) yield return w;
                 settings.SendMessage("ShowTab", 2);
