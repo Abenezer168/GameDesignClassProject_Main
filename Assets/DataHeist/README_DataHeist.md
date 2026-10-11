@@ -161,7 +161,7 @@ Level 3 unlocks when Level 2 is cleared (NEXT LEVEL on Level 2's results, or the
 **The Corporate Security Guardian** (`boss`, arena line in `w`):
 - At the arena line the runner holds position with feet planted. Jump, slide and attack work exactly as normal.
 - The Guardian cycles three attacks: **laser** (a red sight line, then a chest-height bolt), **orb volley** (low, chest, low), and **ground slam** (a red floor warning, then a shockwave you must jump).
-- **The only way to hurt it is to slash its lasers and orbs back into it** (parry). It has 9 health in 3 phases; each phase shortens the warnings and speeds up the shots.
+- **The only way to hurt it is to slash its lasers and orbs back into it** (parry). It has 6 health in 3 phases (2 hits each); each phase shortens the warnings and speeds up the shots a little. Its shots are easier to parry than other slashes: the slash catches them for 0.25 s (instead of 0.17 s) and a little further ahead, and every attack has a long warning.
 - It has a health bar, a hit flash, an enrage message and a death sequence. When it falls, the run resumes and you grab the **evidence**.
 
 **Lockdown escape.**
@@ -169,7 +169,7 @@ Level 3 unlocks when Level 2 is cleared (NEXT LEVEL on Level 2's results, or the
 - **Every hit costs 3 seconds.** If the timer runs out, the run fails ("the facility locked down"), and retrying from the escape checkpoint resets the timer.
 - Reaching the exit completes the campaign and saves the **Guardian of the City** award (`SaveData.guardianAward`), the fragments and the run stats (`totalDeaths`, `totalPlayTime`).
 
-**Validation:** **Data Heist > Validate Level 3 (Playtest Bot)**. Every runner clears it with zero hits and no abilities. Each run collects all 3 fragments, slashes back the 9 shots that destroy the Guardian, and finishes the escape. The bot reports the turret shots, laser cycles, press slams and Guardian attacks it survived.
+**Validation:** **Data Heist > Validate Level 3 (Playtest Bot)**. Every runner clears it with zero hits and no abilities. Each run collects all 3 fragments, slashes back the 6 shots that destroy the Guardian, and finishes the escape. The bot reports the turret shots, laser cycles, press slams and Guardian attacks it survived.
 
 ## The ending, completion screen and credits
 

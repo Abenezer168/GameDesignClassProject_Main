@@ -44,7 +44,7 @@ On first launch a six-shot cinematic story plays: the Sector 7 skyline, the Halc
 * **702 m**, in server halls under Halcyon's archive, with its own music for the infiltration, the boss and the escape.
 * **New hazards:** security turrets (warning line, then chest or ankle shots), cycling laser barriers, live floors that crackle before turning on, crushers, falling machinery and patrolling security drones.
 * **Data fragments:** collect all 3 to open the vault door. If you miss one, the retry sends you back to before the first one you missed, so you can never get stuck.
-* **Boss: the Corporate Security Guardian.** It cycles a laser, an orb volley (low, chest, low) and a ground slam (jump the shockwave). **The only way to hurt it is to slash its lasers and orbs back into it.** It has 9 health over 3 phases, and each phase is faster.
+* **Boss: the Corporate Security Guardian.** It cycles a laser, an orb volley (low, chest, low) and a ground slam (jump the shockwave). **The only way to hurt it is to slash its lasers and orbs back into it.** It has 6 health over 3 phases, and each phase is a little faster. Its warnings are long and the parry timing is forgiving.
 * **Lockdown escape:** grabbing the evidence starts a 34-second countdown. Every hit costs 3 seconds.
 
 ## The ending

@@ -653,6 +653,9 @@ namespace DataHeist
             bool dashing = p.dashT > 0;
             bool atk = p.attackT >= 0 && p.attackT <= 0.17f;
             float ax0 = p.x + 0.05f, ax1 = p.x + ch.attackReach, ay0 = p.y - 0.1f, ay1 = p.y + 1.8f;
+            // parrying the Guardian's shots is more forgiving: a longer window and a bit more reach
+            bool parry = p.attackT >= 0 && p.attackT <= BossParryWindow;
+            float px1Parry = ax1 + BossParryReach;
 
             for (int i = LowerIndex(p.x - 6); i < ents.Length; i++)
             {
@@ -771,14 +774,15 @@ namespace DataHeist
                     }
                     continue;
                 }
-                if (atk && bo.kind != 4 && Overlap(ax0, ay0, ax1, ay1, bb))
+                if ((bo.kind == 2 || bo.kind == 3) && parry && Overlap(ax0, ay0, px1Parry, ay1, bb))
                 {
-                    if (bo.kind == 2 || bo.kind == 3)
-                    {
-                        bo.reflected = true; bo.vx = BossReflectSpeed;     // parry it back at the Guardian
-                        Emit(SimEventType.Deflect, bo.x, bo.y, "reflect");
-                    }
-                    else { bo.alive = false; Emit(SimEventType.Deflect, bo.x, bo.y); }
+                    bo.reflected = true; bo.vx = BossReflectSpeed;     // parry it back at the Guardian
+                    Emit(SimEventType.Deflect, bo.x, bo.y, "reflect");
+                    continue;
+                }
+                if (atk && bo.kind != 2 && bo.kind != 3 && bo.kind != 4 && Overlap(ax0, ay0, ax1, ay1, bb))
+                {
+                    bo.alive = false; Emit(SimEventType.Deflect, bo.x, bo.y);
                     continue;
                 }
                 if (Overlap(px0, py0, px1, py1, bb))
@@ -856,16 +860,18 @@ namespace DataHeist
         // ------------------------------------------------------------------ Level 3 boss
         // The Corporate Security Guardian. The runner stops at the arena line (e.w) and holds position;
         // the Guardian cycles LASER -> ORB VOLLEY -> GROUND SLAM. Laser bolts and orbs can be slashed
-        // back into it (that is the only way to hurt it); shockwaves must be jumped. Every 3 hits
-        // it enters a faster phase. All timing runs from the moment the fight starts, so it is
-        // deterministic and the playtest bot can prove it beatable.
-        public const int BossMaxHp = 9;
+        // back into it (that is the only way to hurt it); shockwaves must be jumped. Every 2 hits
+        // it enters a slightly faster phase. All timing runs from the moment the fight starts, so it
+        // is deterministic and the playtest bot can prove it beatable.
+        public const int BossMaxHp = 6;
         public const int BossIdle = 0, BossFighting = 1, BossDown = 9;
         public const float BossReflectSpeed = 20f, EscapeTime = 34f, EscapeHitPenalty = 3f;
+        // parry tuning for the Guardian's lasers and orbs only (other slashes keep the 0.17 s window)
+        public const float BossParryWindow = 0.25f, BossParryReach = 1.0f;
         const int AtkLaser = 0, AtkOrbs = 1, AtkSlam = 2;
 
-        public static int BossPhase(SimEntity b) => b.hp > 6 ? 1 : b.hp > 3 ? 2 : 3;
-        static float BossPace(SimEntity b) => BossPhase(b) == 1 ? 1f : BossPhase(b) == 2 ? 1.2f : 1.4f;
+        public static int BossPhase(SimEntity b) => b.hp > 4 ? 1 : b.hp > 2 ? 2 : 3;
+        static float BossPace(SimEntity b) => BossPhase(b) == 1 ? 1f : BossPhase(b) == 2 ? 1.1f : 1.2f;
 
         /// <summary>Hit box of the Guardian's body (4 units wide, 4 tall, standing on the floor).</summary>
         public static Rect BossBox(SimEntity b) => Rect.MinMaxRect(b.x - 1.6f, b.y, b.x + 1.6f, b.y + 4f);
@@ -926,7 +932,7 @@ namespace DataHeist
                         bolts.Add(new SimBolt { x = e.x - 1.8f, y = GroundAt(p.x) + h, vx = -9f * pace, kind = 3 });
                         Emit(SimEventType.BossFire, e.x - 1.8f, GroundAt(p.x) + h, "orb");
                         e.vy = n + 1;
-                        e.cd = 0.65f / pace;
+                        e.cd = 0.8f / pace;
                         if (e.vy >= 3) { e.st = 3; e.cd = 1.2f; }
                     }
                     break;
@@ -937,7 +943,7 @@ namespace DataHeist
                         e.step++;
                         e.st = 2;
                         int next = e.step % 3;
-                        e.cd = (next == AtkLaser ? 1.0f : next == AtkOrbs ? 0.7f : 0.85f) / pace;
+                        e.cd = (next == AtkLaser ? 1.3f : next == AtkOrbs ? 0.9f : 1.1f) / pace;
                         Emit(SimEventType.BossTelegraph, e.x, e.y, next == AtkLaser ? "laser" : next == AtkOrbs ? "orbs" : "slam");
                     }
                     break;
