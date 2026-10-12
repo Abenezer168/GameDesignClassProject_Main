@@ -20,6 +20,8 @@ namespace DataHeist
         public float introCountdown = 3.2f;
 
         public RunnerSim Sim { get; private set; }
+        /// <summary>Applies saved abilities to this run and unlocks double jump when its goal is reached.</summary>
+        public PlayerAbilityManager Abilities { get; private set; }
 
         string LevelMusic => "music_" + levelId;
 
@@ -62,6 +64,8 @@ namespace DataHeist
             _input = new RunnerInput();
 
             Sim = new RunnerSim(_level, _ch);
+            Abilities = new PlayerAbilityManager(Sim);       // carries a saved double jump into this run
+            Abilities.DoubleJumpUnlocked += OnDoubleJumpUnlocked;
             _cam = CameraRig.Create();
             Parallax.Create(_cam.transform, Sim.p.y, _level.theme);
             WorldBuilder.Build(_level, Sim);
@@ -165,6 +169,7 @@ namespace DataHeist
                 Sim.Step(DH.SimStep, frame);
                 _acc -= DH.SimStep;
                 HandleEvents();
+                Abilities.Tick();
                 if (Sim.state != SimState.Running) { _acc = 0; break; }
             }
             // keep Unity's Time in step with the glitch so particles/animators slow too
@@ -177,6 +182,16 @@ namespace DataHeist
         }
 
         // ------------------------------------------------------------------ events
+        void OnDoubleJumpUnlocked()
+        {
+            var at = new Vector2(Sim.p.x, Sim.p.y + 1.2f);
+            AudioManager.I.Sfx("unlock", 0.9f);
+            _fx.Burst(at, 36, new[] { DH.Green, DH.Cyan, Color.white }, 7, 0.9f, -6);
+            _fx.FloatText(at + Vector2.up * 0.8f, "DOUBLE JUMP UNLOCKED!", DH.Green);
+            _hud.Flash(0.2f);
+            _hud.ShowDoubleJumpUnlocked();
+        }
+
         void HandleEvents()
         {
             var a = AudioManager.I;

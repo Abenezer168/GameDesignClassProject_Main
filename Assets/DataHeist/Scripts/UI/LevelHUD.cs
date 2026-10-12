@@ -18,6 +18,8 @@ namespace DataHeist
         readonly List<Image> _hearts = new List<Image>();
         Sprite _heartFull, _heartEmpty;
         TextMeshProUGUI _bytes, _timer, _pct, _abilityName, _abilityKey, _controls, _countdown, _countSub, _countBrief;
+        TextMeshProUGUI _djTitle, _djProgress, _djBanner;     // double-jump unlock status (PlayerAbilityManager)
+        float _djBannerT;
         Image _countBriefBg;
         Image _shard, _progressFill, _abilityIcon, _abilityCover, _abilityFrame;
         RectTransform _progressBar;
@@ -108,6 +110,16 @@ namespace DataHeist
             _abilityKey.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(52, 30), new Vector2(160, 12));
             _abilityName = UIKit.Text("AbilityName", root, _ch.abilityName, 8, _ch.color);
             _abilityName.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(52, 14), new Vector2(200, 12));
+
+            // double jump: locked status and progress above the ability panel, plus a banner when it unlocks
+            _djTitle = UIKit.Text("DoubleJumpTitle", root, "", 6, DH.Amber);
+            _djTitle.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(10, 64), new Vector2(360, 10));
+            _djProgress = UIKit.Text("DoubleJumpProgress", root, "", 6, DH.Ink);
+            _djProgress.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(10, 52), new Vector2(360, 10));
+            _djBanner = UIKit.Text("DoubleJumpBanner", root, "DOUBLE JUMP UNLOCKED!", 14, DH.Green, TextAlignmentOptions.Center);
+            _djBanner.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 70), new Vector2(560, 24));
+            _djBanner.outlineWidth = 0.2f; _djBanner.outlineColor = new Color32(18, 10, 26, 255);
+            _djBanner.gameObject.SetActive(false);
 
             _controls = UIKit.Text("Controls", root, "", 7, new Color(DH.Ink.r, DH.Ink.g, DH.Ink.b, 0.55f), TextAlignmentOptions.Right);
             _controls.rectTransform.Place(new Vector2(1, 0), new Vector2(1, 0), new Vector2(-12, 10), new Vector2(420, 12));
@@ -279,6 +291,7 @@ namespace DataHeist
             _abilityFrame.enabled = ready;
             _abilityName.color = ready ? _ch.color : DH.Dim;
 
+            UpdateDoubleJump();
             UpdatePrompt();
             UpdateLevel3();
 
@@ -288,6 +301,47 @@ namespace DataHeist
             _glitch.color = new Color(0.5f, 1, 0.4f, GlitchT > 0 ? 0.18f : 0);
             if (_flashT > 0) _flashT -= Time.unscaledDeltaTime;
             _flash.color = new Color(1, 1, 1, Mathf.Max(0, _flashT * 2));
+        }
+
+        /// <summary>Plays the "DOUBLE JUMP UNLOCKED!" banner (a pop-in, then a fade).</summary>
+        public void ShowDoubleJumpUnlocked()
+        {
+            _djBannerT = 2.6f;
+            _djBanner.gameObject.SetActive(true);
+        }
+
+        void UpdateDoubleJump()
+        {
+            int goal = PlayerAbilityManager.DoubleJumpUnlockPoints;
+            int points = Mathf.Min(_sim.stats.bytes, goal);
+            if (PlayerAbilityManager.IsDoubleJumpUnlocked)
+            {
+                _djTitle.text = "DOUBLE JUMP READY";
+                _djTitle.color = DH.Green;
+                _djProgress.text = "PRESS JUMP AGAIN IN MID-AIR";
+            }
+            else if (_sim.Jump.HasDoubleJump)      // Kai: Kick Thrusters is a built-in double jump
+            {
+                _djTitle.text = "DOUBLE JUMP BUILT IN (KICK THRUSTERS)";
+                _djTitle.color = _ch.color;
+                _djProgress.text = $"UNLOCK FOR ALL RUNNERS: {points}/{goal} POINTS";
+            }
+            else
+            {
+                _djTitle.text = $"DOUBLE JUMP LOCKED - EARN {goal} POINTS TO UNLOCK";
+                _djTitle.color = DH.Amber;
+                _djProgress.text = $"DOUBLE JUMP: {points}/{goal} POINTS";
+            }
+
+            if (_djBannerT > 0)
+            {
+                _djBannerT -= Time.unscaledDeltaTime;
+                float age = 2.6f - _djBannerT;
+                float pop = age < 0.25f ? Mathf.SmoothStep(1.6f, 1f, age / 0.25f) : 1f + 0.04f * Mathf.Sin(age * 10f);
+                _djBanner.rectTransform.localScale = Vector3.one * pop;
+                _djBanner.alpha = Mathf.Clamp01(_djBannerT / 0.5f);
+                if (_djBannerT <= 0) _djBanner.gameObject.SetActive(false);
+            }
         }
 
         void UpdatePrompt()

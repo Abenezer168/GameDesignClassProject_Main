@@ -72,7 +72,7 @@ namespace DataHeist
     /// A 1:1 port of the browser build's sim.js so the level validated by the playtest bot
     /// behaves identically here. Units are world units, y-up. Views only read from it.
     /// </summary>
-    public class RunnerSim
+    public class RunnerSim : IJumpBody
     {
         public readonly LevelData L;
         public readonly PhysicsData P;
@@ -89,6 +89,12 @@ namespace DataHeist
         public int totalFragments;
         public float escapeT;          // seconds left before the facility locks down (while escaping)
         public bool escaping;
+        /// <summary>
+        /// What a jump press does (Decorator pattern, see Gameplay/Abilities). Every runner starts with
+        /// <see cref="SingleJump"/>; Kai's Kick Thrusters is a built-in <see cref="DoubleJumpDecorator"/>, and
+        /// <see cref="PlayerAbilityManager"/> adds one for everyone once double jump is unlocked.
+        /// </summary>
+        public IJumpAbility Jump;
         string lastDeath;
         int cpDrones;
 
@@ -115,6 +121,7 @@ namespace DataHeist
                 if (ents[i].t == "boss") ents[i].hp = BossMaxHp;
             }
             checkpointX = level.spawnX;
+            Jump = ch.ability == AbilityType.KickThrusters ? new DoubleJumpDecorator(new SingleJump()) : new SingleJump();
             Spawn(level.spawnX);
         }
 
@@ -128,6 +135,7 @@ namespace DataHeist
             p = o.p.Clone(); stats = o.stats.Clone(); state = o.state;
             time = o.time; empT = o.empT; magnetT = o.magnetT; checkpointX = o.checkpointX;
             totalBytes = o.totalBytes; cpDrones = o.cpDrones;
+            Jump = o.Jump;      // jump abilities hold no per-run state, so the chain can be shared
         }
 
         public RunnerSim Clone() => new RunnerSim(this);
@@ -208,18 +216,8 @@ namespace DataHeist
             if (inp.jumpPressed) p.buffer = P.jumpBuffer;
             if (inp.abilityPressed) UseAbility();
 
-            // jump / air jump
-            if (p.buffer > 0 && (p.onGround || p.coyote > 0) && !p.wall)
-            {
-                p.vy = P.jumpVelocity * ch.jumpMultiplier;
-                p.onGround = false; p.coyote = 0; p.buffer = 0; p.cut = false; p.pad = false;
-                if (p.sliding) EndSlide(true);
-                Emit(SimEventType.Jump, p.x, p.y);
-            }
-            else if (inp.jumpPressed && !p.onGround && p.coyote <= 0 && ch.ability == AbilityType.KickThrusters && !p.airJumped)
-            {
-                AirJump();
-            }
+            // jump / air jump: handled by the runner's jump ability (single jump, maybe decorated with double jump)
+            Jump.TryJump(this, inp);
             if (!inp.jumpHeld && p.vy > 0 && !p.cut && !p.pad && !p.onGround)
             {
                 p.vy *= P.jumpCutMultiplier; p.cut = true;
@@ -338,6 +336,20 @@ namespace DataHeist
             }
             return false;
         }
+
+        // ------------------------------------------------------------------ IJumpBody (used by jump abilities)
+        bool IJumpBody.CanGroundJump => p.buffer > 0 && (p.onGround || p.coyote > 0) && !p.wall;
+        bool IJumpBody.CanAirJump => !p.onGround && p.coyote <= 0 && !p.airJumped;
+
+        void IJumpBody.GroundJump()
+        {
+            p.vy = P.jumpVelocity * ch.jumpMultiplier;
+            p.onGround = false; p.coyote = 0; p.buffer = 0; p.cut = false; p.pad = false;
+            if (p.sliding) EndSlide(true);
+            Emit(SimEventType.Jump, p.x, p.y);
+        }
+
+        void IJumpBody.AirJump() => AirJump();
 
         void AirJump()
         {
