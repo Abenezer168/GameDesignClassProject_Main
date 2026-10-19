@@ -18,8 +18,11 @@ namespace DataHeist
         readonly List<Image> _hearts = new List<Image>();
         Sprite _heartFull, _heartEmpty;
         TextMeshProUGUI _bytes, _timer, _pct, _abilityName, _abilityKey, _controls, _countdown, _countSub, _countBrief;
-        TextMeshProUGUI _djTitle, _djProgress, _djBanner;     // double-jump unlock status (PlayerAbilityManager)
-        float _djBannerT;
+        TextMeshProUGUI _djTitle, _djProgress;     // double-jump unlock status (PlayerAbilityManager)
+        RectTransform _djToast;                    // small "DOUBLE JUMP ACTIVATED" notification
+        CanvasGroup _djToastGroup;
+        float _djToastT;
+        const float ToastSeconds = 3f;
         Image _countBriefBg;
         Image _shard, _progressFill, _abilityIcon, _abilityCover, _abilityFrame;
         RectTransform _progressBar;
@@ -116,10 +119,17 @@ namespace DataHeist
             _djTitle.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(10, 64), new Vector2(360, 10));
             _djProgress = UIKit.Text("DoubleJumpProgress", root, "", 6, DH.Ink);
             _djProgress.rectTransform.Place(new Vector2(0, 0), new Vector2(0, 0), new Vector2(10, 52), new Vector2(360, 10));
-            _djBanner = UIKit.Text("DoubleJumpBanner", root, "DOUBLE JUMP UNLOCKED!", 14, DH.Green, TextAlignmentOptions.Center);
-            _djBanner.rectTransform.Place(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 70), new Vector2(560, 24));
-            _djBanner.outlineWidth = 0.2f; _djBanner.outlineColor = new Color32(18, 10, 26, 255);
-            _djBanner.gameObject.SetActive(false);
+            // small notification, top centre under the tutorial prompts
+            _djToast = UIKit.Rect("DoubleJumpToast", root);
+            _djToast.Place(new Vector2(0.5f, 1), new Vector2(0.5f, 1), new Vector2(0, -98), new Vector2(210, 24));
+            _djToastGroup = _djToast.gameObject.AddComponent<CanvasGroup>();
+            _djToastGroup.blocksRaycasts = false;
+            var plate = UIKit.Panel("Plate", _djToast, DH.Cyan);
+            plate.rectTransform.Stretch();
+            plate.raycastTarget = false;
+            var toastText = UIKit.Text("Text", _djToast, "DOUBLE JUMP ACTIVATED", 7, DH.Green, TextAlignmentOptions.Center);
+            toastText.rectTransform.Stretch();
+            _djToast.gameObject.SetActive(false);
 
             _controls = UIKit.Text("Controls", root, "", 7, new Color(DH.Ink.r, DH.Ink.g, DH.Ink.b, 0.55f), TextAlignmentOptions.Right);
             _controls.rectTransform.Place(new Vector2(1, 0), new Vector2(1, 0), new Vector2(-12, 10), new Vector2(420, 12));
@@ -303,12 +313,15 @@ namespace DataHeist
             _flash.color = new Color(1, 1, 1, Mathf.Max(0, _flashT * 2));
         }
 
-        /// <summary>Plays the "DOUBLE JUMP UNLOCKED!" banner (a pop-in, then a fade).</summary>
+        /// <summary>Shows the small "DOUBLE JUMP ACTIVATED" notification: slides in, holds, then fades out.</summary>
         public void ShowDoubleJumpUnlocked()
         {
-            _djBannerT = 2.6f;
-            _djBanner.gameObject.SetActive(true);
+            _djToastT = ToastSeconds;
+            _djToast.gameObject.SetActive(true);
         }
+
+        /// <summary>True while the double-jump notification is on screen.</summary>
+        public bool DoubleJumpToastVisible => _djToast != null && _djToast.gameObject.activeSelf;
 
         void UpdateDoubleJump()
         {
@@ -316,7 +329,7 @@ namespace DataHeist
             int points = Mathf.Min(_sim.stats.bytes, goal);
             if (PlayerAbilityManager.IsDoubleJumpUnlocked)
             {
-                _djTitle.text = "DOUBLE JUMP READY";
+                _djTitle.text = "DOUBLE JUMP ACTIVE";
                 _djTitle.color = DH.Green;
                 _djProgress.text = "PRESS JUMP AGAIN IN MID-AIR";
             }
@@ -333,14 +346,14 @@ namespace DataHeist
                 _djProgress.text = $"DOUBLE JUMP: {points}/{goal} POINTS";
             }
 
-            if (_djBannerT > 0)
+            if (_djToastT > 0)
             {
-                _djBannerT -= Time.unscaledDeltaTime;
-                float age = 2.6f - _djBannerT;
-                float pop = age < 0.25f ? Mathf.SmoothStep(1.6f, 1f, age / 0.25f) : 1f + 0.04f * Mathf.Sin(age * 10f);
-                _djBanner.rectTransform.localScale = Vector3.one * pop;
-                _djBanner.alpha = Mathf.Clamp01(_djBannerT / 0.5f);
-                if (_djBannerT <= 0) _djBanner.gameObject.SetActive(false);
+                _djToastT -= Time.unscaledDeltaTime;
+                float age = ToastSeconds - _djToastT;
+                float slide = Mathf.SmoothStep(0f, 1f, age / 0.2f);                     // drops in from above
+                _djToast.anchoredPosition = new Vector2(0, Mathf.Lerp(-80f, -98f, slide));
+                _djToastGroup.alpha = Mathf.Min(slide, Mathf.Clamp01(_djToastT / 0.5f)); // fades out at the end
+                if (_djToastT <= 0) _djToast.gameObject.SetActive(false);
             }
         }
 

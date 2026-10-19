@@ -66,7 +66,7 @@ Every stat lives on a `CharacterDefinition` ScriptableObject in `Resources/DataH
 
 Every runner starts with a **single jump**. Collect **30 points** in a run (1 point per Data Byte, the number on the HUD) and **double jump unlocks**: press jump again in mid-air. The unlock is permanent. It is saved, so it stays through deaths, checkpoint retries, restarts, Levels 1–3 and closing the game, and it never costs bytes or score. Only a new game locks it again (**Data Heist > Debug > Reset Save Data**, `SaveSystem.ResetAll`). Kai's Kick Thrusters already is a double jump, so for Kai nothing changes; his progress still unlocks it for the other runners.
 
-The HUD shows `DOUBLE JUMP LOCKED - EARN 30 POINTS TO UNLOCK` and `DOUBLE JUMP: 20/30 POINTS` above the ability panel. At 30 a **DOUBLE JUMP UNLOCKED!** banner pops in with a particle burst, a flash and the unlock sound, and the status changes to `DOUBLE JUMP READY`.
+The HUD shows `DOUBLE JUMP LOCKED - EARN 30 POINTS TO UNLOCK` and `DOUBLE JUMP: 20/30 POINTS` above the ability panel. At 30 coins a small **DOUBLE JUMP ACTIVATED** notification (a framed panel, top centre under the tutorial prompts) slides in for about 3 seconds and fades out, with a small particle burst and the unlock sound, and the status changes to `DOUBLE JUMP ACTIVE`. The smoke test checks that double jump is locked below 30 coins, activates at 30, and that the notification shows and then hides (screenshot `08b_double_jump_activated`).
 
 How the Decorator pattern is used (`Scripts/Gameplay/Abilities/`):
 

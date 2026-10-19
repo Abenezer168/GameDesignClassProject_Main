@@ -186,9 +186,7 @@ namespace DataHeist
         {
             var at = new Vector2(Sim.p.x, Sim.p.y + 1.2f);
             AudioManager.I.Sfx("unlock", 0.9f);
-            _fx.Burst(at, 36, new[] { DH.Green, DH.Cyan, Color.white }, 7, 0.9f, -6);
-            _fx.FloatText(at + Vector2.up * 0.8f, "DOUBLE JUMP UNLOCKED!", DH.Green);
-            _hud.Flash(0.2f);
+            _fx.Burst(at, 24, new[] { DH.Green, DH.Cyan, Color.white }, 6, 0.7f, -6);
             _hud.ShowDoubleJumpUnlocked();
         }
 
