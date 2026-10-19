@@ -55,7 +55,7 @@ The home page is `Assets/DataHeist/Scenes/MainMenu`. It replaces the team's old 
 
 | Runner | Role | HP | Speed | Reach | Ability (W) | Cooldown | Unlock |
 |---|---|---|---|---|---|---|---|
-| **Kai Okafor** (m) | The Courier | 3 | 1.00× | 1.8 | **Kick Thrusters**: a second jump in mid-air (GDD "Double Jump") | Recharges on landing | Free |
+| **Kai Okafor** (m) | The Courier | 3 | 1.00× | 1.8 | **Kick Thrusters**: a second jump in mid-air on the ability key (W). The jump-key double jump needs 30 coins, like everyone | Recharges on landing | Free |
 | **Nova Reyes** (f) | The Runner | 3 | 1.06× | 2.0 | **Phase Dash**: a 2.6× speed burst. She passes through hazards and clears big gaps (GDD "Sprint") | 3 s | Clear Level 1 |
 | **Jax Mercer** (m) | The Breaker | 4 | 0.95× | 2.3 | **EMP Pulse**: destroys every drone and bolt within 11 m and shuts off lasers for 4 s | 8 s | 300 Data Bytes |
 | **Lin Sato** (f) | The Ghost | 3 | 1.00× | 1.9 | **Time Glitch**: the world runs at half speed for 3 s and Data Bytes fly to her | 10 s | 500 Data Bytes |
@@ -64,7 +64,7 @@ Every stat lives on a `CharacterDefinition` ScriptableObject in `Resources/DataH
 
 ## Double jump unlock (Decorator pattern)
 
-Every runner starts with a **single jump**. Collect **30 points** in a run (1 point per Data Byte, the number on the HUD) and **double jump unlocks**: press jump again in mid-air. The unlock is **per level run**: every level starts locked, and it stays on for the rest of that run, including deaths and checkpoint retries. Restarting the level or starting the next level begins locked again, so you need 30 coins in each run. Nothing is saved, and it never costs coins or score. Kai's Kick Thrusters already is a double jump, so Kai has it from the start and gets no notification.
+Every runner starts with a **single jump**. Collect **30 points** in a run (1 point per Data Byte, the number on the HUD) and **double jump unlocks**: press jump again in mid-air. The unlock is **per level run**: every level starts locked, and it stays on for the rest of that run, including deaths and checkpoint retries. Restarting the level or starting the next level begins locked again, so you need 30 coins in each run. Nothing is saved, and it never costs coins or score. This includes Kai: pressing jump twice does nothing until 30 coins, although his Kick Thrusters ability (W) still gives him a mid-air jump as his special move.
 
 The HUD shows `DOUBLE JUMP LOCKED - EARN 30 POINTS TO UNLOCK` and `DOUBLE JUMP: 20/30 POINTS` above the ability panel. At 30 coins a small **DOUBLE JUMP ACTIVATED** notification (a framed panel, top centre under the tutorial prompts) slides in for about 3 seconds and fades out, with a small particle burst and the unlock sound, and the status changes to `DOUBLE JUMP ACTIVE`. The smoke test checks that double jump is locked below 30 coins, activates at 30, and that the notification shows and then hides (screenshot `08b_double_jump_activated`).
 
@@ -79,7 +79,7 @@ How the Decorator pattern is used (`Scripts/Gameplay/Abilities/`):
 | Manager | `PlayerAbilityManager` | One per level run (created by `LevelController`): checks the 30-coin goal after every step, wraps the run's jump once, and raises `DoubleJumpUnlocked` for the notification |
 | Body | `IJumpBody` | What a jump ability may do to the runner; `RunnerSim` implements it |
 
-`RunnerSim.Step` only calls `Jump.TryJump(this, input)`; the ground-jump and air-jump physics stayed as they were. Kai starts with `DoubleJumpDecorator(SingleJump)`, and after the unlock every other runner gets the same chain. The abilities hold no per-run state, so cloned sims (the playtest bot) share them safely. The bot and the title-screen demo never use the manager, so they keep validating the levels with a single jump. Test it with **Data Heist > Debug > Test Double Jump Unlock** (headless: `DataHeist.EditorTools.DoubleJumpTests.RunBatch`).
+`RunnerSim.Step` only calls `Jump.TryJump(this, input)`; the ground-jump and air-jump physics stayed as they were. Every runner, Kai included, starts with `SingleJump` and gets `DoubleJumpDecorator(SingleJump)` at 30 coins. The abilities hold no per-run state, so cloned sims (the playtest bot) share them safely. The bot and the title-screen demo never use the manager, so they keep validating the levels with a single jump. Test it with **Data Heist > Debug > Test Double Jump Unlock** (headless: `DataHeist.EditorTools.DoubleJumpTests.RunBatch`).
 
 ## Level 1: "Neon Rooftops" (580 m, about 75 s)
 

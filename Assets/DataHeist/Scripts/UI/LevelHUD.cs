@@ -328,13 +328,7 @@ namespace DataHeist
         {
             int goal = PlayerAbilityManager.DoubleJumpUnlockPoints;
             int points = Mathf.Min(_sim.stats.bytes, goal);
-            if (_ch.ability == AbilityType.KickThrusters)      // Kai: Kick Thrusters is a built-in double jump
-            {
-                _djTitle.text = "DOUBLE JUMP BUILT IN (KICK THRUSTERS)";
-                _djTitle.color = _ch.color;
-                _djProgress.text = "PRESS JUMP AGAIN IN MID-AIR";
-            }
-            else if (_abilities != null && _abilities.IsDoubleJumpUnlocked)
+            if (_abilities != null && _abilities.IsDoubleJumpUnlocked)
             {
                 _djTitle.text = "DOUBLE JUMP ACTIVE";
                 _djTitle.color = DH.Green;

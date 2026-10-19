@@ -91,8 +91,8 @@ namespace DataHeist
         public bool escaping;
         /// <summary>
         /// What a jump press does (Decorator pattern, see Gameplay/Abilities). Every runner starts with
-        /// <see cref="SingleJump"/>; Kai's Kick Thrusters is a built-in <see cref="DoubleJumpDecorator"/>, and
-        /// <see cref="PlayerAbilityManager"/> adds one for everyone once double jump is unlocked.
+        /// <see cref="SingleJump"/> (Kai included: his Kick Thrusters is on the ability key, not the jump key), and
+        /// <see cref="PlayerAbilityManager"/> wraps it in a <see cref="DoubleJumpDecorator"/> once the run has 30 coins.
         /// </summary>
         public IJumpAbility Jump;
         string lastDeath;
@@ -121,7 +121,7 @@ namespace DataHeist
                 if (ents[i].t == "boss") ents[i].hp = BossMaxHp;
             }
             checkpointX = level.spawnX;
-            Jump = ch.ability == AbilityType.KickThrusters ? new DoubleJumpDecorator(new SingleJump()) : new SingleJump();
+            Jump = new SingleJump();     // double jump on the jump key only after 30 coins (PlayerAbilityManager)
             Spawn(level.spawnX);
         }
 

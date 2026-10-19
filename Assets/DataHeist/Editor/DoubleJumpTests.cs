@@ -45,7 +45,7 @@ namespace DataHeist.EditorTools
             var level1 = LevelData.Load("level01");
             var level2 = LevelData.Load("level02");
             var nova = CharacterDefinition.Get("nova");      // no built-in air jump
-            var kai = CharacterDefinition.Get("kai");        // Kick Thrusters: a built-in double jump
+            var kai = CharacterDefinition.Get("kai");        // Kick Thrusters is on the ability key only
 
             // 1. a new run starts locked, whatever happened in earlier runs
             var sim = new RunnerSim(level1, nova);
@@ -100,15 +100,32 @@ namespace DataHeist.EditorTools
             var reopened = new RunnerSim(level1, nova);
             Check(!new PlayerAbilityManager(reopened).IsDoubleJumpUnlocked && !PressJumpInMidAir(reopened), "reopening the game: locked");
 
-            // 9. Kai keeps his built-in double jump; reaching 30 coins adds no second wrap or notification
+            // 9. Kai follows the same rule: no jump-key double jump before 30 coins
             var kaiSim = new RunnerSim(level1, kai);
             var kaiAbilities = new PlayerAbilityManager(kaiSim);
             int kaiUnlocks = 0;
             kaiAbilities.DoubleJumpUnlocked += () => kaiUnlocks++;
-            Check(PressJumpInMidAir(kaiSim), "Kai double-jumps with his built-in Kick Thrusters before 30 coins");
+            Check(kaiSim.Jump is SingleJump, $"Kai starts with a single jump ({kaiSim.Jump.Describe()})");
+            Check(!PressJumpInMidAir(kaiSim), "Kai: a mid-air jump press does nothing before 30 coins");
+            Check(PressAbilityInMidAir(kaiSim), "Kai: his Kick Thrusters ability (W) still works as his special move");
             kaiSim.stats.bytes = 30;
             kaiAbilities.Tick();
-            Check(kaiUnlocks == 0 && kaiSim.Jump.Describe() == "Single Jump + Double Jump", $"Kai at 30 coins: no extra wrap or notification ({kaiSim.Jump.Describe()})");
+            Check(kaiUnlocks == 1 && kaiSim.Jump.Describe() == "Single Jump + Double Jump", $"Kai at 30 coins: double jump activates with the notification ({kaiSim.Jump.Describe()})");
+            Check(PressJumpInMidAir(kaiSim), "Kai at 30 coins: a mid-air jump press double-jumps");
+
+            // 10. the title-screen demos (recorded runs, no ability manager) still replay cleanly
+            foreach (var ch in CharacterDefinition.All)
+            {
+                var asset = Resources.Load<TextAsset>($"{DH.Root}Demo/level01_{ch.id}");
+                if (asset == null) { Check(false, $"demo route for {ch.id} exists"); continue; }
+                string route = asset.text.Trim();
+                var demo = new RunnerSim(level1, ch);
+                for (int d = 0; d < route.Length && demo.state == SimState.Running; d++)
+                    for (int k = 0; k < DemoActions.DecisionTicks && demo.state == SimState.Running; k++)
+                    { demo.Step(Dt, DemoActions.Frame(route[d] - '0', k)); demo.events.Clear(); }
+                Check(demo.state == SimState.Won && demo.stats.hits == 0,
+                    $"title demo for {ch.id} replays cleanly ({demo.state}, {demo.stats.hits} hits)");
+            }
         }
 
         /// <summary>Takes off, rises for 0.2 s, then presses jump again in mid-air. True if that press air-jumped.</summary>
@@ -128,6 +145,17 @@ namespace DataHeist.EditorTools
         }
 
         static int _lastJumpPointChange, _lastJumpPickups;
+
+        /// <summary>Takes off, rises for 0.2 s, then presses the ability key in mid-air. True if that made an air jump.</summary>
+        static bool PressAbilityInMidAir(RunnerSim sim)
+        {
+            Land(sim);
+            sim.Step(Dt, new RunnerInputFrame { jumpPressed = true, jumpHeld = true });
+            for (int i = 0; i < 24; i++) sim.Step(Dt, new RunnerInputFrame { jumpHeld = true });
+            sim.events.Clear();
+            sim.Step(Dt, new RunnerInputFrame { abilityPressed = true, jumpHeld = true });
+            return sim.events.Exists(e => e.type == SimEventType.AirJump);
+        }
 
         /// <summary>Steps with no input until the runner is back on the ground.</summary>
         static void Land(RunnerSim sim)

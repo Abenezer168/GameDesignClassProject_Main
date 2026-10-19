@@ -39,8 +39,7 @@ namespace DataHeist
         {
             if (IsDoubleJumpUnlocked || Points < DoubleJumpUnlockPoints) return;
             IsDoubleJumpUnlocked = true;
-            if (_sim.Jump.HasDoubleJump) return;            // Kai: Kick Thrusters is already a double jump
-            _sim.Jump = new DoubleJumpDecorator(_sim.Jump);
+            if (!_sim.Jump.HasDoubleJump) _sim.Jump = new DoubleJumpDecorator(_sim.Jump);
             DoubleJumpUnlocked?.Invoke();
         }
     }
