@@ -349,7 +349,6 @@ namespace DataHeist.EditorTools
             AudioAudit("character select", 1);
             foreach (var w in Shot("07_character_select")) yield return w;
 
-            PlayerAbilityManager.ResetForNewGame();   // start Level 1 with double jump locked (the real save is restored at the end)
             Object.FindAnyObjectByType<CharacterSelectController>()?.SendMessage("Confirm");   // RUN AS ...
             yield return 1.0f;
             Check(LoadingScreen.Active, "starting a run shows the loading screen");
@@ -372,11 +371,11 @@ namespace DataHeist.EditorTools
             var hud = Object.FindAnyObjectByType<LevelHUD>();
             if (level != null && level.Sim != null && hud != null)
             {
-                Check(!PlayerAbilityManager.IsDoubleJumpUnlocked && !level.Sim.Jump.HasDoubleJump,
+                Check(!level.Abilities.IsDoubleJumpUnlocked && !level.Sim.Jump.HasDoubleJump,
                     $"double jump is locked below 30 coins ({level.Sim.stats.bytes} collected)");
                 level.Sim.stats.bytes = Mathf.Max(level.Sim.stats.bytes, PlayerAbilityManager.DoubleJumpUnlockPoints);
                 yield return 0.3f;
-                Check(PlayerAbilityManager.IsDoubleJumpUnlocked && level.Sim.Jump.HasDoubleJump, "30 coins activate double jump");
+                Check(level.Abilities.IsDoubleJumpUnlocked && level.Sim.Jump.HasDoubleJump, "30 coins activate double jump");
                 Check(hud.DoubleJumpToastVisible, "the small 'DOUBLE JUMP ACTIVATED' notification shows");
                 foreach (var w in Shot("08b_double_jump_activated")) yield return w;
                 yield return 3.2f;

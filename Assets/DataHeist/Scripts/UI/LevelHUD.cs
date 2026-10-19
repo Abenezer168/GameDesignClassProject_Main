@@ -12,6 +12,7 @@ namespace DataHeist
     public class LevelHUD : MonoBehaviour
     {
         RunnerSim _sim;
+        PlayerAbilityManager _abilities;           // this run's double-jump unlock
         RunnerInput _input;
         CharacterDefinition _ch;
         Canvas _canvas;
@@ -42,9 +43,9 @@ namespace DataHeist
         TextMeshProUGUI _bossName, _escapeTime, _escapeLabel;
         public float GlitchT;
 
-        public void Init(RunnerSim sim, RunnerInput input)
+        public void Init(RunnerSim sim, RunnerInput input, PlayerAbilityManager abilities)
         {
-            _sim = sim; _input = input; _ch = sim.ch;
+            _sim = sim; _input = input; _ch = sim.ch; _abilities = abilities;
             _canvas = UIKit.Canvas("HUD", 10);
             _canvas.transform.SetParent(transform, false);
             var root = (RectTransform)_canvas.transform;
@@ -327,17 +328,17 @@ namespace DataHeist
         {
             int goal = PlayerAbilityManager.DoubleJumpUnlockPoints;
             int points = Mathf.Min(_sim.stats.bytes, goal);
-            if (PlayerAbilityManager.IsDoubleJumpUnlocked)
+            if (_ch.ability == AbilityType.KickThrusters)      // Kai: Kick Thrusters is a built-in double jump
+            {
+                _djTitle.text = "DOUBLE JUMP BUILT IN (KICK THRUSTERS)";
+                _djTitle.color = _ch.color;
+                _djProgress.text = "PRESS JUMP AGAIN IN MID-AIR";
+            }
+            else if (_abilities != null && _abilities.IsDoubleJumpUnlocked)
             {
                 _djTitle.text = "DOUBLE JUMP ACTIVE";
                 _djTitle.color = DH.Green;
                 _djProgress.text = "PRESS JUMP AGAIN IN MID-AIR";
-            }
-            else if (_sim.Jump.HasDoubleJump)      // Kai: Kick Thrusters is a built-in double jump
-            {
-                _djTitle.text = "DOUBLE JUMP BUILT IN (KICK THRUSTERS)";
-                _djTitle.color = _ch.color;
-                _djProgress.text = $"UNLOCK FOR ALL RUNNERS: {points}/{goal} POINTS";
             }
             else
             {

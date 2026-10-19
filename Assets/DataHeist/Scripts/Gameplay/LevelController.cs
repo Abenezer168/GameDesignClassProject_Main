@@ -64,7 +64,7 @@ namespace DataHeist
             _input = new RunnerInput();
 
             Sim = new RunnerSim(_level, _ch);
-            Abilities = new PlayerAbilityManager(Sim);       // carries a saved double jump into this run
+            Abilities = new PlayerAbilityManager(Sim);       // this run starts with double jump locked
             Abilities.DoubleJumpUnlocked += OnDoubleJumpUnlocked;
             _cam = CameraRig.Create();
             Parallax.Create(_cam.transform, Sim.p.y, _level.theme);
@@ -77,7 +77,7 @@ namespace DataHeist
             _fx = new GameObject("FX").AddComponent<FXSystem>();
 
             _hud = new GameObject("HUD").AddComponent<LevelHUD>();
-            _hud.Init(Sim, _input);
+            _hud.Init(Sim, _input, Abilities);
             _menus = new GameObject("Menus").AddComponent<LevelMenus>();
             _menus.Init(_input);
             _menus.OnResume += Resume;

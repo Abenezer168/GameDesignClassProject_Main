@@ -36,8 +36,6 @@ namespace DataHeist
         public int totalDeaths;             // every failed attempt, all levels
         public float totalPlayTime;         // seconds spent in runs, all levels
         public bool endingSeen;             // the final cinematic has played at least once
-        // abilities earned in play (PlayerAbilityManager); kept until a new game
-        public bool doubleJumpUnlocked;     // reached the double-jump goal in any run
     }
 
     /// <summary>PlayerPrefs-backed JSON save. One global instance; call Save() after changes.</summary>

@@ -31,7 +31,7 @@ On first launch a six-shot cinematic story plays: the Sector 7 skyline, the Halc
 ## Level 1 + Runners (Data Heist update)
 * **Level 1 "Neon Rooftops"** (580 m, about 75 s): a full auto-runner level that teaches jump, slide, attack and the runner's ability. It has gaps, billboards, Security Drones, Gunner drones, lasers, jump pads, a catwalk bonus route, 2 checkpoints, an alarm-zone finale, the Data Shard and the extraction point.
 * **4 runners** (2 men, 2 women), each with a unique W ability: Kai (Kick Thrusters), Nova (Phase Dash), Jax (EMP Pulse) and Lin (Time Glitch). Runners unlock by clearing a level or by spending Data Bytes in the Shop.
-* **Double jump unlock:** every runner starts with a single jump. Collect 30 points (Data Bytes) in a run and double jump unlocks for good, across all levels, deaths and restarts, until a new game. It's built with the Decorator design pattern (`Scripts/Gameplay/Abilities/`); see the design notes.
+* **Double jump unlock:** every runner starts with a single jump. Collect 30 coins (Data Bytes) in a level and double jump activates for the rest of that run, with a small notification. Each new level run starts locked again. It's built with the Decorator design pattern (`Scripts/Gameplay/Abilities/`); see the design notes.
 * **The game loop:** Character Select → countdown → HUD (health, Data Bytes, Data Shard, progress, ability cooldown, controls) → pause with volume and **key rebinding** → game over with checkpoint retry → results with S/A/B/C rank, save data, unlocks and **NEXT LEVEL**.
 
 ## Level 2: "Corporate District"

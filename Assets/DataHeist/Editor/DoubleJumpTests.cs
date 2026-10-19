@@ -6,9 +6,9 @@ namespace DataHeist.EditorTools
 {
     /// <summary>
     /// Checks the double-jump unlock (Decorator pattern + PlayerAbilityManager) against the real simulation.
-    /// Menu: Data Heist > Debug > Test Double Jump Unlock. Headless: -executeMethod
-    /// DataHeist.EditorTools.DoubleJumpTests.RunBatch (exit code 1 on failure). The player's save is
-    /// snapshotted first and put back afterwards.
+    /// The unlock is per level run: every run starts locked and needs 30 coins. Menu: Data Heist > Debug >
+    /// Test Double Jump Unlock. Headless: -executeMethod DataHeist.EditorTools.DoubleJumpTests.RunBatch
+    /// (exit code 1 on failure). The player's save is snapshotted first and put back afterwards.
     /// </summary>
     public static class DoubleJumpTests
     {
@@ -47,71 +47,68 @@ namespace DataHeist.EditorTools
             var nova = CharacterDefinition.Get("nova");      // no built-in air jump
             var kai = CharacterDefinition.Get("kai");        // Kick Thrusters: a built-in double jump
 
-            // start of a brand-new game
-            SaveSystem.ResetAll();
-            Check(!PlayerAbilityManager.IsDoubleJumpUnlocked, "a new game starts with double jump locked");
-
-            // 1. fewer than 30 points: single jump only
+            // 1. a new run starts locked, whatever happened in earlier runs
             var sim = new RunnerSim(level1, nova);
             var abilities = new PlayerAbilityManager(sim);
             int unlocks = 0;
             abilities.DoubleJumpUnlocked += () => unlocks++;
-            Check(sim.Jump is SingleJump, $"starts as a plain single jump ({sim.Jump.Describe()})");
+            Check(!abilities.IsDoubleJumpUnlocked && sim.Jump is SingleJump, $"a new run starts locked ({sim.Jump.Describe()})");
+
+            // 2. fewer than 30 coins: single jump only
             sim.stats.bytes = PlayerAbilityManager.DoubleJumpUnlockPoints - 1;
             abilities.Tick();
-            Check(!PlayerAbilityManager.IsDoubleJumpUnlocked && unlocks == 0, "29 points: still locked");
-            Check(!PressJumpInMidAir(sim), "29 points: a mid-air jump press does nothing");
+            Check(!abilities.IsDoubleJumpUnlocked && unlocks == 0, "29 coins: still locked");
+            Check(!PressJumpInMidAir(sim), "29 coins: a mid-air jump press does nothing");
 
-            // 2. exactly 30 points: unlocks, the chain is decorated, and it works
-            sim = new RunnerSim(level1, nova);
-            abilities = new PlayerAbilityManager(sim);
-            unlocks = 0;
-            abilities.DoubleJumpUnlocked += () => unlocks++;
+            // 3. exactly 30 coins: activates once, the chain is decorated, and it works
             sim.stats.bytes = PlayerAbilityManager.DoubleJumpUnlockPoints;
             abilities.Tick();
-            Check(PlayerAbilityManager.IsDoubleJumpUnlocked && unlocks == 1, "30 points: double jump unlocks (once)");
-            Check(sim.Jump is DoubleJumpDecorator && sim.Jump.HasDoubleJump, $"30 points: jump is decorated ({sim.Jump.Describe()})");
-            Check(sim.stats.bytes == 30, "unlocking leaves the points unchanged");
-            Check(PressJumpInMidAir(sim), "30 points: a mid-air jump press double-jumps");
-            Check(_lastJumpPointChange == _lastJumpPickups, $"using double jump costs no points (change {_lastJumpPointChange}, pickups {_lastJumpPickups})");
+            Check(abilities.IsDoubleJumpUnlocked && unlocks == 1, "30 coins: double jump activates (once)");
+            Check(sim.Jump is DoubleJumpDecorator && sim.Jump.HasDoubleJump, $"30 coins: jump is decorated ({sim.Jump.Describe()})");
+            Check(sim.stats.bytes == 30, "activating leaves the coins unchanged");
+            Check(PressJumpInMidAir(sim), "30 coins: a mid-air jump press double-jumps");
+            Check(_lastJumpPointChange == _lastJumpPickups, $"using double jump costs no coins (change {_lastJumpPointChange}, pickups {_lastJumpPickups})");
 
-            // 3. more than 30 points: still available, never unlocked or wrapped twice
+            // 4. more than 30 coins: still on, never activated or wrapped twice
             sim.stats.bytes = 45;
             abilities.Tick();
-            Check(unlocks == 1, "45 points: no second unlock");
-            Check(sim.Jump.Describe() == "Single Jump + Double Jump", $"45 points: wrapped exactly once ({sim.Jump.Describe()})");
+            Check(unlocks == 1, "45 coins: no second activation");
+            Check(sim.Jump.Describe() == "Single Jump + Double Jump", $"45 coins: wrapped exactly once ({sim.Jump.Describe()})");
             Land(sim);
-            Check(PressJumpInMidAir(sim), "45 points: double jump recharges on landing and works again");
+            Check(PressJumpInMidAir(sim), "45 coins: double jump recharges on landing and works again");
 
-            // 4. death / checkpoint retry, level restart and the next level keep it
+            // 5. dying and retrying from a checkpoint is the same run: it stays on
             sim.Respawn();
-            Check(PressJumpInMidAir(sim), "after dying and retrying from a checkpoint: still unlocked");
-            SaveSystem.Reload();                                  // as if the game was closed and reopened
+            abilities.Tick();
+            Check(abilities.IsDoubleJumpUnlocked && PressJumpInMidAir(sim), "after dying and retrying from a checkpoint: still on");
+
+            // 6. restarting the level is a new run: locked again
             var restart = new RunnerSim(level1, nova);
-            new PlayerAbilityManager(restart);
-            Check(PressJumpInMidAir(restart), "after restarting the level (and reloading the save): still unlocked");
+            var restartAbilities = new PlayerAbilityManager(restart);
+            Check(!restartAbilities.IsDoubleJumpUnlocked && !PressJumpInMidAir(restart), "restarting the level: locked again");
+
+            // 7. the next level is a new run: locked until 30 coins there
             var next = new RunnerSim(level2, nova);
-            new PlayerAbilityManager(next);
-            Check(next.stats.bytes == 0 && PressJumpInMidAir(next), "Level 2 with 0 points: still unlocked");
+            var nextAbilities = new PlayerAbilityManager(next);
+            Check(!nextAbilities.IsDoubleJumpUnlocked && !PressJumpInMidAir(next), "Level 2: starts locked");
+            next.stats.bytes = 30;
+            nextAbilities.Tick();
+            Check(nextAbilities.IsDoubleJumpUnlocked && PressJumpInMidAir(next), "Level 2: 30 coins activate it there too");
 
-            // 5. Kai keeps his built-in double jump and is not wrapped twice
+            // 8. nothing is saved: the save data has no unlock to carry over
+            SaveSystem.Reload();
+            var reopened = new RunnerSim(level1, nova);
+            Check(!new PlayerAbilityManager(reopened).IsDoubleJumpUnlocked && !PressJumpInMidAir(reopened), "reopening the game: locked");
+
+            // 9. Kai keeps his built-in double jump; reaching 30 coins adds no second wrap or notification
             var kaiSim = new RunnerSim(level1, kai);
-            new PlayerAbilityManager(kaiSim);
-            Check(kaiSim.Jump.Describe() == "Single Jump + Double Jump", $"Kai's chain is not doubled ({kaiSim.Jump.Describe()})");
-
-            // 6. a completely new game locks it again
-            PlayerAbilityManager.ResetForNewGame();
-            var fresh = new RunnerSim(level1, nova);
-            new PlayerAbilityManager(fresh);
-            Check(!PlayerAbilityManager.IsDoubleJumpUnlocked && !PressJumpInMidAir(fresh), "new game: double jump is locked again");
-            SaveSystem.Data.doubleJumpUnlocked = true; SaveSystem.Save();
-            SaveSystem.ResetAll();
-            Check(!PlayerAbilityManager.IsDoubleJumpUnlocked, "Reset Save Data also locks it");
-
-            // Kai without the unlock: his Kick Thrusters still double-jump (unchanged behaviour)
-            var kaiLocked = new RunnerSim(level1, kai);
-            new PlayerAbilityManager(kaiLocked);
-            Check(PressJumpInMidAir(kaiLocked), "Kai still double-jumps with his built-in Kick Thrusters");
+            var kaiAbilities = new PlayerAbilityManager(kaiSim);
+            int kaiUnlocks = 0;
+            kaiAbilities.DoubleJumpUnlocked += () => kaiUnlocks++;
+            Check(PressJumpInMidAir(kaiSim), "Kai double-jumps with his built-in Kick Thrusters before 30 coins");
+            kaiSim.stats.bytes = 30;
+            kaiAbilities.Tick();
+            Check(kaiUnlocks == 0 && kaiSim.Jump.Describe() == "Single Jump + Double Jump", $"Kai at 30 coins: no extra wrap or notification ({kaiSim.Jump.Describe()})");
         }
 
         /// <summary>Takes off, rises for 0.2 s, then presses jump again in mid-air. True if that press air-jumped.</summary>
@@ -124,7 +121,7 @@ namespace DataHeist.EditorTools
             sim.events.Clear();
             int bytesBefore = sim.stats.bytes;
             sim.Step(Dt, new RunnerInputFrame { jumpPressed = true, jumpHeld = true });
-            // points may only change by bytes picked up in this same step, never go down for the jump itself
+            // coins may only change by pickups in this same step, never go down for the jump itself
             _lastJumpPointChange = sim.stats.bytes - bytesBefore;
             _lastJumpPickups = sim.events.FindAll(e => e.type == SimEventType.Byte).Count;
             return sim.events.Exists(e => e.type == SimEventType.AirJump);
