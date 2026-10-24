@@ -1,296 +1,96 @@
-# The Data Heist: Full Game Design Notes
+# The Data Heist: How the Code Works
 
-Everything for the game lives in `Assets/DataHeist`: the title screen and story intro, the four playable runners, the three levels (Level 1 "Neon Rooftops", Level 2 "Corporate District" and Level 3 "The Underground Data Vault" with the Guardian boss and the lockdown escape), the cinematic ending, the completion screen and the credits. Each part has its own section below. Nothing in the team's existing folders was removed. The team's old Options, Shop, GameScreen and GameOver scenes now reroute to the new screens, and **Setup Project** adds the Data Heist scenes to Build Settings.
+This guide explains every script in `Assets/DataHeist/Scripts/` in plain language.
 
-## Quick start (Unity 6000.3.22f1)
+## The big picture
 
-1. Pull the repo and open it in Unity. Wait for the import to finish.
-2. Run the menu command **Data Heist > Setup Project**. It does four things:
-   - re-imports the art with pixel settings (32 PPU, point filter, no compression)
-   - creates the editable character assets
-   - checks Build Settings
-   - wires the Main Menu Play button
-3. Open `Assets/DataHeist/Scenes/MainMenu` and press Play. The flow is **Press any key → (story on first launch) → home page → Play → Choose Your Runner → Level 1**.
-   - Shortcuts: **Data Heist > Play Level 1 / Play Level 2 / Play Level 3 / Play Story / Play Ending**.
-   - Debug commands: **Data Heist > Debug > Unlock All Runners, Levels + 1000 Bytes** and **Reset Save Data**.
-4. After editing a level, run **Data Heist > Validate Level 1 / Level 2 / Level 3 (Playtest Bot)**. It proves every runner can still finish with zero hits.
-5. After changing menus or flow, run **Data Heist > Debug > Smoke Test**. It runs **muted** (Unity's master mute), so nothing plays through your speakers while it races through the game. It plays through the title screen, Settings (including clicking the audio sliders), Shop, every story shot, Character Select, all three levels, the Guardian fight, the escape, the ending, the completion screen and the credits, and fails on any console error. It also saves screenshots of each screen to `Logs/Screens/`.
+* The **player** has a `Rigidbody2D`, so Unity's physics engine handles gravity and landing on the rooftops.
+* Coins, obstacles, enemies, bullets and the Data Shard have **trigger colliders**. When the player touches one, Unity calls `OnTriggerEnter2D()` on that object, and the object decides what happens (add a coin, take damage, and so on).
+* The **GameManager** keeps track of the run (coins, Data Shard, game over), and the **UIManager** shows it on screen.
+* **SaveManager** stores progress between runs with `PlayerPrefs`.
 
-## Title screen and settings
+## Player scripts
 
-The home page is `Assets/DataHeist/Scenes/MainMenu`. It replaces the team's old `MainMenuScreenScene`, which was deleted. Like every Data Heist scene it holds one GameObject (`MainMenuController`), and everything else is built at runtime.
+### PlayerController.cs
+Runs, jumps, double jumps and slides.
+* `FixedUpdate()` sets the horizontal speed to `moveSpeed` every physics step, so the player always runs to the right.
+* `Update()` checks the ground with `Physics2D.OverlapBox` at the `groundCheck` point, then reads the keyboard:
+  * **Space on the ground** (or within `coyoteTime`, 0.1 s after running off an edge) calls `Jump(jumpForce)`.
+  * **Space in the air** jumps again only if `canDoubleJump` is true and the double jump hasn't been used since landing.
+  * **Letting go of Space early** halves the upward speed, so a tap gives a small hop.
+  * **S / Down Arrow on the ground** starts a slide. The collider is made shorter so the player fits under barriers and bullets. When `slideTime` runs out, `CanStandUp()` checks the space above, and the player only stands up if it's empty.
+* **Double jump unlock:** `canDoubleJump` becomes true once `GameManager.instance.coinCount` reaches `coinsForDoubleJump` (30). It stays true for the rest of the run, and a new run starts with it false again.
+* `UpdateAnimation()` picks the run, jump, fall, slide or attack frames and flips through them.
 
-- **It shows the game being played.** `DemoPlayer` replays a recorded clean run of Level 1 through the real simulation and level views, so the background is the game itself. It plays as your equipped runner and loops. A **HOW TO RUN** card lights up JUMP, SLIDE and SLASH as the demo runner does each one. A "REC LIVE // NEON ROOFTOPS // 312 M" feed tag and the Halcyon tower on the skyline (`HalcyonSkyline`) complete the scene.
-- The demo routes live in `Resources/DataHeist/Demo/level01_<runner>.txt`, one action digit per 75 ms decision. They are made by **Data Heist > Record Title Screen Demo**, which runs the playtest bot in a "natural" mode: it only presses buttons when needed, and it takes drones down so every verb appears. The recorder replays each route and refuses any route that doesn't finish clean. **Re-record after changing Level 1 or the physics**; otherwise the demo can desync. If a route is missing, the home page falls back to the plain rooftop backdrop (`MenuBackdrop`).
-- **Boot flow (like a commercial release):** the game opens on a **key-art splash** with PRESS START. `Story/keyart.png` is a 1920x1080 HD poster rendered procedurally by `Tools/DataHeistGenerators/gen_keyart.py`: a painted-style night city with bloom, fog, searchlights, the Halcyon tower and a wet reflective rooftop, with the crew as large-scale rim-lit pixel art. The importer gives it bilinear filtering instead of pixel-art point filtering. It stays silent until the player presses. Then a **loading screen** (`LoadingScreen`) shows the equipped runner sprinting along a progress bar, with status lines and runner tips. The progress is real: `GamePreloader` warms the sprite and audio caches and parses the level, the home page and its demo are built under the screen, and scenes load asynchronously and activate only when ready. The screen shows for at least 2.2 s. Starting a run from Character Select uses the same loading screen.
-- After loading, the first launch plays the story, which returns to the home page.
-- Home page: **PLAY** (Character Select), **STORY** (replay the intro), **SHOP** (`ShopPanel`: recruit runners with Data Bytes and equip them), **OPTIONS**, **QUIT**. The team's old Options, Shop, GameScreen and GameOver scenes reroute to these.
-- Audio: `AudioManager.Music` crossfades, so only one track is ever heard. Level music starts on GO, after the countdown. Story sounds fire when a shot fades in, and the story waits for the player rather than auto-advancing.
-- **OPTIONS** (`SettingsPanel`) has three tabs. AUDIO has master, music and SFX volume. VIDEO has resolution, windowed/fullscreen and vsync. CONTROLS rebinds Jump, Slide, Attack, Ability and Pause. Every change is applied and saved immediately: volumes and display settings go to `SaveData` and are applied by `GameSettings`, and key bindings use the same PlayerPrefs overrides that the levels load.
-- Screen changes fade through black via `SceneFader.Load(scene)`.
+### PlayerAttack.cs
+Press **J** or **left-click** to attack.
+* An attack lasts `attackDuration` (0.25 s), and you have to wait `attackCooldown` (0.35 s) before the next one.
+* While attacking, `HitEnemies()` uses `Physics2D.OverlapBoxAll` to find everything in a box in front of the player. Any object with an `EnemyController` is destroyed.
 
-## Story intro (StoryScene)
+### PlayerHealth.cs
+* Starts with `maxHealth` (3) plus any extra hearts bought in the Shop.
+* `TakeDamage()` removes health, starts a `damageCooldown` of 1.25 s and makes the player blink. During the cooldown, more damage is ignored, so one collision only costs one health point.
+* Falling below `fallLimit` or reaching 0 health calls `GameManager.instance.GameOver()`.
 
-`StoryController` plays a six-shot cinematic, built at runtime from game sprites plus the story art in `Resources/DataHeist/Story` (generated by `Tools/DataHeistGenerators/gen_story.py`). The shots are: the Sector 7 skyline, the Halcyon tower, the shard vault, Kai and the job offer, the crew line-up, and the rooftop run. After that, the game's title card plays and the game goes to the home page.
+## Things in the level
 
-- Captions are letterboxed with typewriter text. A speaker portrait appears when a shot sets `portrait`.
-- **Next:** Enter, Space, a click or pad A. The first press finishes the line and the second moves on. Set `AutoAdvanceDelay` in code to make finished lines move on by themselves.
-- **Skip:** Esc or pad Start.
-- The intro plays after the first key press on first launch (`SaveData.storySeen`) and returns to the home page. It can always be replayed from STORY.
-- Each shot is a small `StoryShot` class in `Scripts/Story/StoryShots.cs`. To change the story, edit the captions in `StoryController.Start`; to add a shot, write another `StoryShot` subclass.
-- The story carries on between levels: each level's first countdown shows a one-line **mission briefing** under its name (`LevelCatalog` `briefing`). Shard 1 exposes a payroll of bribed officials, which leads to Shard 2 in the Corporate District, and the shards then unlock the archive vault in Level 3, whose evidence the ending leaks to the city.
-- Editor shortcuts: **Data Heist > Play Story** and **Data Heist > Create Story Scene**. **Setup Project** also creates the scene.
+### Coin.cs
+On `OnTriggerEnter2D` with the player: `GameManager.instance.AddCoin()`, then the coin destroys itself. The `collected` bool makes sure a coin can never count twice.
 
-## Controls (GDD, all remappable in Pause → Controls)
+### Obstacle.cs
+Used by trash cans and barriers. Touching one calls `PlayerHealth.TakeDamage(1)`. Trash cans are short (jump over them), and a barrier's collider starts above the ground (slide under it).
 
-| Action | Keyboard / Mouse | Gamepad |
-|---|---|---|
-| Jump (hold for higher) | Space, ↑ | South |
-| Slide (hold to extend). In mid-air it dives into a slide | S, ↓ | East |
-| Attack | Left click, J | West |
-| Character ability | W, Left Shift | North |
-| Pause | Esc, P | Start |
+### EnemyController.cs
+One script for both enemy types, chosen with the `enemyType` setting:
+* **ScoutDrone:** moves left and right around its start position with `Mathf.Sin`, and bobs up and down.
+* **Gunner:** stays in place. While the player is between `minShootDistance` (6) and `shootRange` (15) in front of it, it fires a bullet every `shootInterval` (1.45 s) from its `firePoint`.
+* Touching either one hurts the player. `Die()` (called by `PlayerAttack`) destroys it.
 
-## The runners
+### Projectile.cs
+The gunner's bullet. It moves left at `speed` each frame, hurts the player on touch and removes itself after `lifeTime` seconds. Bullets fly at chest height, so you can jump over them or slide under them.
 
-| Runner | Role | HP | Speed | Reach | Ability (W) | Cooldown | Unlock |
-|---|---|---|---|---|---|---|---|
-| **Kai Okafor** (m) | The Courier | 3 | 1.00× | 1.8 | **Kick Thrusters**: a second jump in mid-air on the ability key (W). The jump-key double jump needs 30 coins, like everyone | Recharges on landing | Free |
-| **Nova Reyes** (f) | The Runner | 3 | 1.06× | 2.0 | **Phase Dash**: a 2.6× speed burst. She passes through hazards and clears big gaps (GDD "Sprint") | 3 s | Clear Level 1 |
-| **Jax Mercer** (m) | The Breaker | 4 | 0.95× | 2.3 | **EMP Pulse**: destroys every drone and bolt within 11 m and shuts off lasers for 4 s | 8 s | 300 Data Bytes |
-| **Lin Sato** (f) | The Ghost | 3 | 1.00× | 1.9 | **Time Glitch**: the world runs at half speed for 3 s and Data Bytes fly to her | 10 s | 500 Data Bytes |
+### DataShard.cs
+On touch: `GameManager.instance.CollectDataShard()`. Its collider is tall, so you collect it even while jumping.
 
-Every stat lives on a `CharacterDefinition` ScriptableObject in `Resources/DataHeist/CharacterDefs`, so designers can tune them in the Inspector. Each runner has 28 animation frames: idle 4, run 8, jump 2, fall 2, slide 2, attack 4, hurt 2, ability 2 and win 2. There is also a portrait.
+## Game flow
 
-## Double jump unlock (Decorator pattern)
+### GameManager.cs
+* `coinCount`, `hasDataShard` and `isGameOver` describe the current run.
+* **Escape** pauses (`Time.timeScale = 0`) and resumes.
+* When the player passes the `finishLine`, the level is complete if the Data Shard was collected, otherwise it's game over.
+* `GameOver()` and `LevelComplete()` save this run's coins **once** with `SaveManager.AddCoins()`. `LevelComplete()` also saves the Data Shard.
+* `RetryLevel()`, `LoadNextLevel()` and `LoadMainMenu()` are called by the buttons on the end screens.
+* `PlaySound()` plays a sound effect at the volume chosen in Options.
 
-Every runner starts with a **single jump**. Collect **30 points** in a run (1 point per Data Byte, the number on the HUD) and **double jump unlocks**: press jump again in mid-air. The unlock is **per level run**: every level starts locked, and it stays on for the rest of that run, including deaths and checkpoint retries. Restarting the level or starting the next level begins locked again, so you need 30 coins in each run. Nothing is saved, and it never costs coins or score. This includes Kai: pressing jump twice does nothing until 30 coins, although his Kick Thrusters ability (W) still gives him a mid-air jump as his special move.
+### UIManager.cs
+* Every frame it writes the one line at the top of the screen: `Coins: 25     Health: 3     Data Shard: 0/1`.
+* `ShowPause()`, `ShowGameOver()` and `ShowLevelComplete()` turn the panels on and fill in their text.
 
-The HUD shows `DOUBLE JUMP LOCKED - EARN 30 POINTS TO UNLOCK` and `DOUBLE JUMP: 20/30 POINTS` above the ability panel. At 30 coins a small **DOUBLE JUMP ACTIVATED** notification (a framed panel, top centre under the tutorial prompts) slides in for about 3 seconds and fades out, with a small particle burst and the unlock sound, and the status changes to `DOUBLE JUMP ACTIVE`. The smoke test checks that double jump is locked below 30 coins, activates at 30, and that the notification shows and then hides (screenshot `08b_double_jump_activated`).
+### SaveManager.cs
+A `static` class (no GameObject needed) with small functions around `PlayerPrefs`:
+`GetTotalCoins / AddCoins / SpendCoins`, `HasDataShard / SaveDataShard`, `GetExtraHearts / AddExtraHeart`, and the music and sound volumes.
 
-How the Decorator pattern is used (`Scripts/Gameplay/Abilities/`):
+### CameraFollow.cs
+Follows the player sideways with a `lookAhead` so you can see what's coming, and smoothly follows up and down. The sky and city pictures are children of the camera, so the background stays still.
 
-| Role | Class | Job |
-|---|---|---|
-| Component interface | `IJumpAbility` | "What happens when jump is pressed": `TryJump(body, input)`, `HasDoubleJump`, `Describe()` |
-| Concrete component | `SingleJump` | The default ground jump (jump buffer and coyote time) |
-| Base decorator | `JumpAbilityDecorator` | Wraps another `IJumpAbility` and forwards to it |
-| Concrete decorator | `DoubleJumpDecorator` | Lets the wrapped ability try first, then adds one mid-air jump (recharges on landing) |
-| Manager | `PlayerAbilityManager` | One per level run (created by `LevelController`): checks the 30-coin goal after every step, wraps the run's jump once, and raises `DoubleJumpUnlocked` for the notification |
-| Body | `IJumpBody` | What a jump ability may do to the runner; `RunnerSim` implements it |
+## Menus
 
-`RunnerSim.Step` only calls `Jump.TryJump(this, input)`; the ground-jump and air-jump physics stayed as they were. Every runner, Kai included, starts with `SingleJump` and gets `DoubleJumpDecorator(SingleJump)` at 30 coins. The abilities hold no per-run state, so cloned sims (the playtest bot) share them safely. The bot and the title-screen demo never use the manager, so they keep validating the levels with a single jump. Test it with **Data Heist > Debug > Test Double Jump Unlock** (headless: `DataHeist.EditorTools.DoubleJumpTests.RunBatch`).
+* **ButtonManagerScript.cs** (in `Assets/Scripts/`, written by our team): `LoadGameScene("SceneName")` loads a scene and `QuitGame()` exits. Every menu button uses it.
+* **ShopMenu.cs:** shows the saved coins and sells an extra heart for 100 coins (maximum 2).
+* **OptionsMenu.cs:** two sliders that save the music and sound volume. The music changes right away.
+* **MusicPlayer.cs:** sets each scene's music to the saved volume.
+* **SimpleAnimation.cs:** flips through a list of sprites. Used by coins, drones, gunners, bullets and the Data Shard.
 
-## Level 1: "Neon Rooftops" (580 m, about 75 s)
+## Numbers you can change in the Inspector
 
-The level follows the GDD rule of teaching one verb at a time, then combining them.
-
-| Section | Metres | Teaches | Beats |
+| Object | Field | Default | Effect |
 |---|---|---|---|
-| 0 Wake-up | 0–60 | **Jump** | Byte arcs trace the jump curve over garbage cans, ending with a double can |
-| 1 Gaps | 60–150 | **Gaps & step-ups** | 2–3 m gaps, a 1 m step up, a drop down, a repair kit |
-| 2 Billboards | 150–215 | **Slide** | Three neon billboards, slide then jump, the first jump pad |
-| 3 Drones | 215–292 | **Attack** | Scout drones at head height and low. Stomping a drone also kills it. **Checkpoint 1**, then the ability prompt (personalised per runner) |
-| 4 Mixed | 292–455 | **Combos** | Can → billboard → drone runs, a 3.5 m drop gap, the first Gunner drone (slash its bolt), a jump pad to a neon catwalk with a bonus route. **Checkpoint 2** |
-| 5 Security Sweep | 455–560 | **Pressure** | Alarm zone with a 12% speed boost, red pulse and siren. Low and high lasers, a gunner, dense combos |
-| Extraction | 560–580 | **Payoff** | Data Shard pickup, the EXIT tower and the results screen |
-
-There are 305 Data Bytes, 2 repair kits, 2 checkpoints and 1 Data Shard. `Docs/level01_map.png` shows the whole layout.
-
-**Win / lose (GDD):** you win by reaching the extraction point. You lose when health hits zero or you fall. After a loss you can **Retry from Checkpoint**, **Restart** or **Quit**. Collected bytes are always banked to the wallet.
-
-**Rank:** S needs ≥85% bytes, no hits and no retries. A needs ≥70% bytes, at most 2 hits and no retries. B needs ≥45% bytes. Everything else is C. Score adds up bytes ×10, the shard (+500), drones ×25, a time bonus and a no-hit bonus (+300).
-
-**Fairness rules built into the content:**
-- 120 Hz fixed step
-- coyote time of 0.10 s and a jump buffer of 0.12 s
-- a slide never stands you up under a ceiling
-- gunner bolts always fly at standing-chest height, so you can slide, jump or slash them
-- i-frames after every hit
-
-## Architecture
-
-```
-Scripts/
-  Core/          DH (constants), LevelData (JSON model), CharacterDefinition (+ roster),
-                 SaveSystem (PlayerPrefs JSON), RunnerInput (Input System + rebinding),
-                 SpriteLibrary (Resources loader), AudioManager (pooled SFX + music)
-  Gameplay/      RunnerSim  - deterministic simulation: physics, collisions, abilities, scoring
-                 LevelController - scene entry point: fixed-step loop, input latching, event routing, game flow
-  Presentation/  WorldBuilder, EntityViews, PlayerView, CameraRig, Parallax, FXSystem, SpriteAnimator
-  UI/            UIKit (runtime UGUI/TMP factory), LevelHUD, LevelMenus, CharacterSelectController
-Editor/          DataHeistSetup (menu), DataHeistArtImporter (pixel import rules), PlaytestBot
-Resources/DataHeist/
-  Characters/  Tiles/  Obstacles/  Enemies/  Pickups/  Decor/  FX/  UI/  Parallax/
-  Audio/SFX (28 wav)  Audio/Music (2 ogg loops)  Levels/level01.json  Fonts/Press Start 2P (OFL)
-Scenes/          CharacterSelectScene, Level01_NeonRooftops (one GameObject each; everything else is built at runtime)
-```
-
-**Simulation / presentation split.** `RunnerSim` is plain C# with no MonoBehaviour and no physics engine. Views only read from it, and gameplay reports what happened as events (Jump, Hurt, DroneDown and so on), which drive the sound, particles and HUD. This split gives three things:
-- **Determinism.** A run plays the same way on every machine.
-- **Testability.** The editor `PlaytestBot` beam-searches inputs through the real sim and proves the level can be cleared.
-- **One source of truth.** The same rules and the same `level01.json` drive the browser prototype (`Tools/WebPrototype`), so a level change shows up in both builds.
-
-**Data-driven levels.** Levels are JSON. `Tools/DataHeistGenerators/gen_level.py` authors them with helpers such as `byte_arc` (bytes that follow the real jump parabola) and `prompt`. To make Level 2, copy the script, change the sections, regenerate the JSON, then run the bot.
-
-## Level 2: "Corporate District" (644 m, about 85 s)
-
-Level 2 unlocks when Level 1 is cleared. You can reach it two ways: **NEXT LEVEL** on Level 1's results screen (same runner, through the loading screen), or the **MISSION** picker in Character Select (up/down or click). It is authored by `Tools/DataHeistGenerators/gen_level02.py`, a copy of `gen_level.py` with three new helpers. The scene is `Level02_CorporateDistrict`, created by **Setup Project**. The art comes from `gen_level2_art.py`: glass-tower rooftops, the sniper nest, the tracer round, the live floor and the billboard.
-
-| Hazard | How it works | How to beat it |
-|---|---|---|
-| **Sniper** (`sniper`) | A penthouse window behind the roof. At 17 m it paints a **red laser sight** at chest height for 0.9 s; the line thickens and flickers just before the shot. Then a fast tracer (24 m/s) fires. | Slide under it, jump over it, or slash the round. Jax's EMP silences the nest. |
-| **Live wires** (`shock`) | An electrified floor strip. From 14 m away it is live for 0.9 s of every 1.5 s. | Jump it, or cross while it's dark. EMP shorts it out. |
-| **Falling sign** (`sign`) | A Halcyon billboard hanging 4.2 m up. At 10.5 m it shakes and sparks, then falls and lands as a wreck on the roof. | Jump the wreck, or slash it (in the air or on the roof) to smash it. |
-
-Every hazard is **triggered by distance, not by the clock**, so a run and a checkpoint retry always meet it the same way, and the playtest bot can prove the level is fair.
-
-| Section | Metres | Teaches |
-|---|---|---|
-| 0 Lobby | 0–70 | Warm-up on the glass towers |
-| 1 Live Wires | 70–175 | Electric floors on their own, then with cans |
-| 2 Falling Signs | 175–282 | Billboards (one floor up), then a drone. **Checkpoint 1** |
-| 3 Snipers | 285–402 | Snipers on their own, then mixed with cans and wires |
-| 4 Combos | 405–524 | Jump pad to a catwalk, then wires, sniper, sign and gunner together. **Checkpoint 2** |
-| 5 Lockdown | 527–644 | Alarm zone at 112% speed with every hazard, then the Data Shard and extraction |
-
-There are 217 Data Bytes, 2 repair kits, 2 checkpoints, 6 snipers, 7 live floors and 5 signs. The level plays `music_level02` ("Cyber March").
-
-**Validation:** run **Data Heist > Validate Level 2 (Playtest Bot)**. It proves every runner can clear the level with zero hits and no abilities, and reports what each route survived. Currently every run survives all 6 sniper shots, all 5 falling signs and 14 live-floor pulses, so the hazards really engage. Headless, `PlaytestBot.ValidateAllBatch` checks every level and exits 0 or 1.
-
-**To add a level:** copy `gen_level02.py`, add the level to `LevelCatalog`, create its scene (copy `CreateLevel02Scene`), add a `music_<levelId>` track, then run the bot.
-
-## Level 3: "The Underground Data Vault" (702 m, the final mission)
-
-Level 3 unlocks when Level 2 is cleared (NEXT LEVEL on Level 2's results, or the mission picker). It is authored by `gen_level03.py`, the art comes from `gen_level3_art.py`, and the scene is `Level03_UndergroundVault`. It uses the `vault` theme: a server-hall back wall and three parallax layers, a ceiling band, drifting dust and spark showers, animated screens and server LEDs, security cameras and rotating beacons. The music is "Dark City" for the infiltration, "Boss Fight 2" for the Guardian and "Die Hard Battle" for the escape.
-
-**New hazards** (all triggered by distance, so a retry plays out the same way):
-
-| Hazard | How it works | How to beat it |
-|---|---|---|
-| Security turret (`turret`) | Wakes at 16 m and shows a red warning line for 0.7 s, then fires at chest height or, in `low` mode, at the ankles | Chest shots: slide or jump. Ankle shots: jump. Either: slash |
-| Laser barrier (`low_cycle` / `high_cycle`) | Off, then a flickering warning, then on (2 s cycle) | Low beams: jump. High beams: slide |
-| Live floor (`shock`, mode `warn`) | Crackles amber for 0.4 s before every live phase | Jump it, or cross while it is off. EMP shorts it out |
-| Falling machinery (`sign`, kind `machine`) | A red marker on the floor, then the load shakes and drops | Jump the wreck, or slash it |
-| Crusher (`press`) | Up, a shudder warning, then it slams down to 0.6 m and rises again; the hazard stripes mark the plate | Slide under it while it's down, or pass while it's up |
-| Security drones (`gunner`, move `patrol`) | Sweep back and forth with the usual warning line and bolts | Slash, stomp or dodge |
-
-**Data fragments.** There are 3 fragments on the main path, shown in the HUD under DATA. The vault door (`vault`) opens only with all three. If you reach it without them, the run fails with "the vault stayed sealed", and **retry respawns you at the last checkpoint before the first fragment you missed**, so a run can never soft-lock.
-
-**The Corporate Security Guardian** (`boss`, arena line in `w`):
-- At the arena line the runner holds position with feet planted. Jump, slide and attack work exactly as normal.
-- The Guardian cycles three attacks: **laser** (a red sight line, then a chest-height bolt), **orb volley** (low, chest, low), and **ground slam** (a red floor warning, then a shockwave you must jump).
-- **The only way to hurt it is to slash its lasers and orbs back into it** (parry). It has 6 health in 3 phases (2 hits each); each phase shortens the warnings and speeds up the shots a little. Its shots are easier to parry than other slashes: the slash catches them for 0.25 s (instead of 0.17 s) and a little further ahead, and every attack has a long warning.
-- It has a health bar, a hit flash, an enrage message and a death sequence. When it falls, the run resumes and you grab the **evidence**.
-
-**Lockdown escape.**
-- Picking up the evidence starts a 34 s countdown with red alarm lighting, the escape track, and an escape progress bar under the timer.
-- **Every hit costs 3 seconds.** If the timer runs out, the run fails ("the facility locked down"), and retrying from the escape checkpoint resets the timer.
-- Reaching the exit completes the campaign and saves the **Guardian of the City** award (`SaveData.guardianAward`), the fragments and the run stats (`totalDeaths`, `totalPlayTime`).
-
-**Validation:** **Data Heist > Validate Level 3 (Playtest Bot)**. Every runner clears it with zero hits and no abilities. Each run collects all 3 fragments, slashes back the 6 shots that destroy the Guardian, and finishes the escape. The bot reports the turret shots, laser cycles, press slams and Guardian attacks it survived.
-
-## The ending, completion screen and credits
-
-Clearing Level 3's escape skips the results screen and goes through the loading screen into **EndingScene**. `EndingController` directs six chapters, built at runtime from the game's own sprites under the night-city parallax. **ESC / SKIP SCENE** skips the current chapter.
-
-| Chapter | What happens |
-|---|---|
-| 1. The Truth Is Revealed | Giant screens across the skyline switch to the leaked Halcyon files. Citizens react, the drones lose power and fall, and the tower's red beacon and searchlights die. Ends on "The truth can no longer be hidden." |
-| 2. The City Transforms | BEFORE: shuttered shops, red lamps, a drone patrol, an "OBEY / HALCYON SEES ALL" billboard and people hurrying home. Then a wave of light sweeps the street: shops open, lamps turn warm, the billboard reads "FREE CITY", drones fly off, and the sky changes from red to neon. AFTER: shopkeepers wave from their doors, families walk, a tram and flying cars pass, and bunting and string lights go up |
-| 3. The Hero Returns | **Playable.** Walk with LEFT/RIGHT (A/D, stick or d-pad) and wave with the attack key. Citizens turn, wave or cheer and speak one at a time ("You saved our city!", "Thank you for exposing the truth!", "We are finally free!", "You're our hero!"...). Waving makes everyone nearby cheer. If you stop for 10 s, the hero strolls on, so the scene never blocks |
-| 4. The Award Ceremony | The hero walks up onto the stage. The mayor welcomes them, the crowd cheers and the mayor gives the speech, then presents the medal. A **GUARDIAN OF THE CITY** award card plays (rotating gold rays and the medal). Then the handshake under camera flashes, applause and confetti |
-| 5. The Statue | "Words are not enough..." Everyone turns to the covered statue, the cloth lifts, and a bronze statue of *your* runner is revealed. Then the crowd cheers, the camera pushes in, and the plaque reads "In honor of the hero who restored freedom and revealed the truth." |
-| 6. The City Is Free | Your runner stands on a rooftop over the free skyline while fireworks fill the sky. Then "THE CITY IS FREE", "The data was stolen. The truth was restored. The future belongs to the people.", and "THANK YOU FOR PLAYING THE DATA HEIST" |
-
-- **Building blocks:** `CinematicUI` (letterbox, typewriter captions, speaker dialogue with the mayor's portrait, title cards, award card, speech bubbles, SKIP), `Actor` (citizens, the mayor and the hero), and `Fireworks` / `Confetti` (pooled particles). Chapters are coroutines in `EndingChapters.cs`. This is plain coroutine direction rather than Unity Timeline, which matches the code-built scenes everywhere else.
-- **Art:** `gen_ending_art.py` draws it all. People use the runners' own skeleton renderer: 8 citizens, 2 children, the mayor (with a portrait), and the hero's walk, wave and handshake poses. Props: shops in closed and open states, red and warm lamps, both billboards, evidence screens, tram, flying cars, bunting, string lights, stage, podium, banner, medal, pedestal, cloth and bronze statues.
-- **Music, one mood per chapter (CC0):** Bittersweet, Silver Lining, Feel Good Summer Tune, Triumphant (ceremony and statue), and Ending Scene (finale).
-- **Sound (CC0):** crowd applause (expl0it3r) and firework bangs (rubberduck).
-
-**CompletionScene** (MISSION COMPLETE) shows the Guardian of the City award and a campaign report, all read from the save: final score (the sum of best scores), data fragments, levels completed, total deaths and completion time. The buttons are PLAY AGAIN, REPLAY ENDING, MAIN MENU, CREDITS and QUIT. Once the award is earned, the home page shows **MISSION REPORT** under the wallet, so the report and the ending can be replayed any time.
-
-**CreditsScene** scrolls the credits; hold ENTER to speed up, and ESC or BACK returns to the menu. **Edit `Resources/DataHeist/Credits/team.txt`** to put in your team's real names; the placeholders are marked `[...]`, and the only name filled in is the repository's git author. Third-party credits are appended automatically.
-
-Saved progress: `SaveData.guardianAward`, `endingSeen`, `totalDeaths`, `totalPlayTime` and `LevelRecord.fragments` (alongside `cleared` and `records`). Shortcut: **Data Heist > Play Ending**.
-
-## Audio
-
-All sound is real, CC0-licensed (public domain) audio. Credits appear in-game under **Options > Credits** and in `Resources/DataHeist/Audio/CREDITS.txt`.
-
-- **Sound effects** are mixed from four Kenney packs: Sci-Fi, Impact, Interface and Digital Audio.
-- **Music** comes from OpenGameArt.org.
-- `Tools/DataHeistGenerators/build_audio.py` builds every file. It downloads the pinned sources, mixes each effect's "recipe" (layers, slices, filters), then trims, fades and normalises it.
-- **Effects** are levelled to about −11 dB (UI sounds softer), so the volume numbers in the code are the mix. **Music** is matched to −16 LUFS and has click-free loop points.
-
-### Music (`Audio/Music`)
-
-| File | Track | Plays |
-|---|---|---|
-| `music_menu.ogg` | "Midnight Drive" by congusbongus | home page (after PRESS START), Character Select, results screen |
-| `music_story.ogg` | "Cyberpunk Moonlight Sonata" by joth | story intro |
-| `music_level01.ogg` | "Cyber Runner" by ansimuz | Level 1, from GO |
-| `music_level02.ogg` | "Cyber March" by iamoneabe (quiet intro trimmed) | Level 2, from GO |
-
-Silence is deliberate on the key-art splash (until the player presses start) and during the 3-2-1 countdown. Tracks crossfade, so two are never heard at once.
-
-### Sound effects (`Audio/SFX`, all `sfx_<name>.wav`)
-
-| Name | Made from (Kenney) | Plays when |
-|---|---|---|
-| `jump` | phaseJump3 + concrete footstep | the runner jumps |
-| `air_jump` | phaserUp6 + thruster burst | Kai's Kick Thrusters (second jump) |
-| `land` | concrete footstep + soft impact | landing (louder on hard landings) |
-| `slide` | filtered scratch + footstep | slide starts |
-| `dash` | force field + thruster | Nova's Phase Dash; dives use it pitched up |
-| `attack` | laserSmall + air swish | slash |
-| `hurt` | heavy punch + glitch + error | taking a hit |
-| `explode` | explosion crunch + sub-bass boom | a drone is destroyed |
-| `shoot` | laserRetro | a gunner drone fires |
-| `deflect` | metal impact + ricochet | slashing a bolt out of the air |
-| `emp` | low boom + force field + down-zap | Jax's EMP Pulse |
-| `glitch` | glitch stutters + down-zap | Lin's Time Glitch; story cuts |
-| `byte` | pepSound3 | collecting a Data Byte; pitch rises over a chain. Also the SFX volume test |
-| `repair` | powerUp11 | repair kit |
-| `shard` | three-tone zap up + powerUp12 | Data Shard pickup; vault shot in the story |
-| `pad` | phaserUp1 | jump pad |
-| `checkpoint` | confirmation + powerUp | checkpoint reached |
-| `unlock` | powerUp12 + confirmation | runner recruited (Shop, Character Select); job offer in the story |
-| `count` | tone1 | 3, 2, 1 |
-| `go` | highUp + confirmation | GO; story title card |
-| `game_over` | low three-tone + low boom | the run fails |
-| `denied` | error_006 | ability on cooldown, can't afford, story missing |
-| `alarm` | *synthesised siren* (gen_audio.py) | entering an alarm zone; the heist shot in the story |
-| `level_complete` | *synthesised jingle* (gen_audio.py) | reaching extraction |
-| `ui_move` | click_005 | hovering/moving between buttons; story typewriter |
-| `ui_select` | select_004 | pressing a button, PRESS START |
-| `ui_back` | back_002 | closing a menu, pausing, leaving a screen |
-| `step` | concrete footstep | not used yet |
-
-### Swapping in your own sounds
-
-- **Quick swap:** drop a file with the **same name** into `Audio/SFX` or `Audio/Music`. WAV, OGG and MP3 all work; the importer sets streaming for music and decompress-on-load for effects. Nothing in the code changes.
-- **Rebuilt swap (survives regeneration):** edit the recipe in `build_audio.py` (`SFX` for effects, `MUSIC` for tracks), then run `pip install numpy scipy soundfile pyloudnorm` and `python3 Tools/DataHeistGenerators/build_audio.py Assets/DataHeist/Resources/DataHeist`. Downloads are cached in `Tools/DataHeistGenerators/.audio_cache/` (gitignored).
-- **Mix:** per-moment volume is the second argument of each `AudioManager.I.Sfx("name", volume)` call, and the player's sliders scale everything (Options > Audio).
-
-## Regenerating the art and audio
-
-All art and audio are original and procedurally generated. The scripts are in `Tools/DataHeistGenerators`:
-- `gen_characters.py`: skeleton-posed pixel runners
-- `gen_env.py`: tiles, props, drones, FX, UI, parallax
-- `gen_audio.py`: synthesised SFX and tracks. Unity now only uses its siren and level-complete jingle; the web prototype still uses all of it
-- `build_audio.py`: the game's real CC0 audio (see **Audio** above)
-- `gen_level.py`: the level JSON
-- `build_all.sh`: rebuilds everything
-
-They need Python 3 with numpy, scipy and Pillow, plus ffmpeg.
-
-## Ideas for Level 2+
-
-The hooks already exist:
-- `zones` handle speed and alarm areas.
-- `gunner` handles projectile enemies.
-- `laser` modes and `platforms` handle vertical routes.
-- `CharacterDefinition.unlock` supports `ClearLevel` for per-level unlocks.
-
-The Shop scene can call `SaveSystem.TryUnlock(def)` to sell runners in the shopkeeper booth.
+| Player | `moveSpeed` | 7.5 | Running speed |
+| Player | `jumpForce` | 15.5 | Height of a normal jump |
+| Player | `doubleJumpForce` | 14 | Height of the double jump |
+| Player | `coinsForDoubleJump` | 30 | Coins needed to unlock the double jump |
+| Player | `maxHealth` | 3 | Starting health |
+| Player | `damageCooldown` | 1.25 | Seconds of safety after a hit |
+| Player | `attackRange` | 1.8 | How far the attack reaches |
+| Gunner | `shootInterval` | 1.45 | Seconds between shots |
+| ShopMenu | `extraHeartPrice` | 100 | Price of an extra heart |
